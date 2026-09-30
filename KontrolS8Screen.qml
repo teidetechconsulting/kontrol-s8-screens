@@ -226,9 +226,12 @@ Mixxx.ControllerScreen {
                     color: "#3ddc84"; opacity: 0.25; disabledColor: "#ffffff"; disabledOpacity: 0.08
                 }
             }
+            // The RGB renderer mixes the bands into one colour per column, so the
+            // band colours must be far apart: bass red-orange, mids green,
+            // highs blue (kick = warm, vocals/synths = green, hats = blue).
             Mixxx.WaveformRendererRGB {
-                axesColor: "#00ffffff"; lowColor: "#2f6fff"; midColor: "#5fd4df"; highColor: "#dfe6ea"
-                gainAll: 1.0; gainLow: 1.0; gainMid: 0.9; gainHigh: 0.6
+                axesColor: "#00ffffff"; lowColor: "#ff3a1e"; midColor: "#37e05a"; highColor: "#2f8cff"
+                gainAll: 1.0; gainLow: 1.0; gainMid: 1.0; gainHigh: 1.0
             }
             Mixxx.WaveformRendererStem { gainAll: 1.0 }
             Mixxx.WaveformRendererBeat { color: "#40ffffff" }
