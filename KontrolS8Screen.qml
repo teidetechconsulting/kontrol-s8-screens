@@ -11,6 +11,9 @@ Mixxx.ControllerScreen {
     readonly property int screenIndex: screenId === "right" ? 1 : 0
     property string group: screenId === "right" ? "[Channel2]" : "[Channel1]"
     property var player: Mixxx.PlayerManager.getPlayer(root.group)
+    // Stem layers draw over the RGB spectrum, so the deck waveform keeps them
+    // off; the stems view will show them split into lanes.
+    property bool showStems: false
 
     // Theme
     readonly property color bg: "#0b0d10"
@@ -233,7 +236,7 @@ Mixxx.ControllerScreen {
                 axesColor: "#00ffffff"; lowColor: "#ff3a1e"; midColor: "#37e05a"; highColor: "#2f8cff"
                 gainAll: 1.0; gainLow: 1.0; gainMid: 1.0; gainHigh: 1.0
             }
-            Mixxx.WaveformRendererStem { gainAll: 1.0 }
+            Mixxx.WaveformRendererStem { gainAll: root.showStems ? 1.0 : 0.0 }
             Mixxx.WaveformRendererBeat { color: "#40ffffff" }
             Mixxx.WaveformRendererMark {
                 playMarkerColor: "#ff3b30"; playMarkerBackground: "transparent"
