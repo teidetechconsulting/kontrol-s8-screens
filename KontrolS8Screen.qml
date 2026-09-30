@@ -1,0 +1,258 @@
+import QtQuick
+import QtQuick.Layouts
+import Mixxx 1.0 as Mixxx
+import Mixxx.Controls 1.0 as MixxxControls
+import "S8Frame.mjs" as S8Frame
+
+// One Kontrol S8 display. "left" shows deck 1, "right" deck 2 (deck C/D
+// follow-up: take the focused deck from the HID mapping).
+Mixxx.ControllerScreen {
+    id: root
+    required property string screenId
+    readonly property int screenIndex: screenId === "right" ? 1 : 0
+    property string group: screenId === "right" ? "[Channel2]" : "[Channel1]"
+    property var player: Mixxx.PlayerManager.getPlayer(root.group)
+
+    // Theme
+    readonly property color bg: "#0b0d10"
+    readonly property color panel: "#14181d"
+    readonly property color text: "#e8ecef"
+    readonly property color dim: "#8a949c"
+    readonly property color faint: "#4a535b"
+    readonly property color syncColor: "#3ddc84"
+    readonly property color leaderColor: "#ff8a1e"
+    readonly property color warn: "#ff4d4d"
+    readonly property string sans: "Noto Sans"
+    readonly property string mono: "Noto Sans Mono"
+
+    init: function(controllerName, isDebug) {}
+    shutdown: function() {}
+    transformFrame: function(input, timestamp) {
+        return S8Frame.encode(root.screenIndex, input);
+    }
+
+    // ---- deck state -----------------------------------------------------
+    component Co: Mixxx.ControlProxy { group: root.group }
+    Co { id: loaded; key: "track_loaded"; onValueChanged: { root.player = Mixxx.PlayerManager.getPlayer(root.group); phrase.reloadBeats() } }
+    Co { id: bpm; key: "bpm" }
+    Co { id: rate; key: "rate" }
+    Co { id: rateRange; key: "rateRange" }
+    Co { id: duration; key: "duration" }
+    Co { id: playpos; key: "playposition" }
+    Co { id: samples; key: "track_samples" }
+    Co { id: syncOn; key: "sync_enabled" }
+    Co { id: leader; key: "sync_leader" }
+    Co { id: keylock; key: "keylock" }
+    Co { id: quantize; key: "quantize" }
+    Co { id: loopOn; key: "loop_enabled" }
+    Co { id: loopSize; key: "beatloop_size" }
+    Co { id: playing; key: "play" }
+
+    function clock(seconds) {
+        if (!(seconds >= 0)) return "--:--";
+        var s = Math.floor(seconds);
+        return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2);
+    }
+
+    // ---- phrase model: bars from the beat grid, default-length phrases ----
+    QtObject {
+        id: phrase
+        property var beats: []            // frame positions
+        property int phraseBars: 16
+        readonly property real frame: playpos.value * samples.value / 2
+        // index of the last beat at or before the playhead, plus fraction
+        readonly property real beatPos: {
+            var b = beats, n = b.length, f = frame;
+            if (n < 2 || f < b[0]) return 0;
+            var lo = 0, hi = n - 1;
+            while (lo < hi) { var mid = (lo + hi + 1) >> 1; if (b[mid] <= f) lo = mid; else hi = mid - 1; }
+            var next = lo + 1 < n ? b[lo + 1] : b[lo] + (b[lo] - b[lo - 1]);
+            return lo + (f - b[lo]) / (next - b[lo]);
+        }
+        readonly property int bar: Math.floor(beatPos / 4) + 1
+        readonly property int beatInBar: Math.floor(beatPos) % 4 + 1
+        readonly property int number: Math.floor((bar - 1) / phraseBars) + 1
+        readonly property int barInPhrase: (bar - 1) % phraseBars + 1
+        readonly property real barsLeft: phraseBars - (beatPos / 4 - (number - 1) * phraseBars)
+        // next hotcue ahead of the playhead
+        property var nextCue: null
+        readonly property real barsToCue: nextCue ? (beatIndexOf(nextCue.pos) - beatPos) / 4 : -1
+
+        function beatIndexOf(f) {
+            var b = beats, n = b.length;
+            if (n < 2) return 0;
+            var lo = 0, hi = n - 1;
+            while (lo < hi) { var mid = (lo + hi + 1) >> 1; if (b[mid] <= f) lo = mid; else hi = mid - 1; }
+            var next = lo + 1 < n ? b[lo + 1] : b[lo] + (b[lo] - b[lo - 1]);
+            return lo + (f - b[lo]) / (next - b[lo]);
+        }
+        function reloadBeats() {
+            var m = root.player ? root.player.beatsModel : null, list = [];
+            if (m) for (var i = 0; i < m.rowCount(); i++) list.push(m.data(m.index(i, 0), 257));
+            beats = list;
+        }
+        function refreshNextCue() {
+            var m = root.player ? root.player.hotcuesModel : null, best = null;
+            if (m) for (var i = 0; i < m.rowCount(); i++) {
+                var idx = m.index(i, 0);
+                var pos = m.data(idx, 257), isLoop = m.data(idx, 260);
+                if (pos > frame + 1 && !isLoop && (!best || pos < best.pos))
+                    best = {pos: pos, n: m.data(idx, 261) + 1, label: m.data(idx, 259) || ""};
+            }
+            nextCue = best;
+        }
+    }
+    Timer { interval: 250; running: true; repeat: true; onTriggered: phrase.refreshNextCue() }
+    Component.onCompleted: {
+        var setting = typeof engine !== "undefined" && engine.getSetting ? engine.getSetting("phraseBars") : undefined;
+        phrase.phraseBars = Number(setting) || 16;
+        phrase.reloadBeats();
+    }
+
+    // ---- layout (480x272) -------------------------------------------------
+    Rectangle {
+        anchors.fill: parent
+        color: root.bg
+
+        // Header
+        Item {
+            id: header
+            x: 6; y: 3; width: parent.width - 12; height: 42
+            Rectangle {
+                id: badge; width: 22; height: parent.height - 6; radius: 2
+                anchors.verticalCenter: parent.verticalCenter
+                color: "#2f8cff"
+                Text { anchors.centerIn: parent; text: root.screenIndex === 0 ? "A" : "B"; color: root.bg; font.family: root.sans; font.pixelSize: 17; font.bold: true }
+            }
+            Column {
+                anchors.left: badge.right; anchors.leftMargin: 6; anchors.right: stats.left; anchors.rightMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                Text { width: parent.width; elide: Text.ElideRight; text: root.player && root.player.isLoaded ? root.player.title : "No track"; color: root.text; font.family: root.sans; font.pixelSize: 15; font.bold: true }
+                Text { width: parent.width; elide: Text.ElideRight; text: root.player && root.player.isLoaded ? root.player.artist : ""; color: root.dim; font.family: root.sans; font.pixelSize: 12 }
+            }
+            Row {
+                id: stats; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    Text { anchors.right: parent.right; text: bpm.value > 0 ? bpm.value.toFixed(2) : "--"; color: root.text; font.family: root.mono; font.pixelSize: 21; font.bold: true }
+                    Text {
+                        anchors.right: parent.right
+                        property real pct: rate.value * rateRange.value * 100
+                        text: (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%"; color: root.dim; font.family: root.mono; font.pixelSize: 10
+                    }
+                }
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter; width: 40; height: 26; radius: 3
+                    color: "#2a3139"
+                    Text { anchors.centerIn: parent; text: root.player ? root.player.keyText : ""; color: root.text; font.family: root.mono; font.pixelSize: 14; font.bold: true }
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "-" + root.clock(duration.value * (1 - playpos.value))
+                    color: duration.value * (1 - playpos.value) < 30 && playing.value > 0 ? root.warn : root.text
+                    font.family: root.mono; font.pixelSize: 21; font.bold: true
+                }
+            }
+        }
+
+        // Status chips
+        Row {
+            id: status
+            x: 6; anchors.top: header.bottom; anchors.topMargin: 2; spacing: 4; height: 16
+            component Chip: Rectangle {
+                property string label; property color tint; property bool on
+                height: 16; width: t.implicitWidth + 10; radius: 2
+                color: on ? tint : "transparent"; border.width: on ? 0 : 1; border.color: root.faint
+                Text { id: t; anchors.centerIn: parent; text: parent.label; color: parent.on ? root.bg : root.faint; font.family: root.sans; font.pixelSize: 10; font.bold: true }
+            }
+            Chip { label: leader.value > 0 ? "MASTER" : "SYNC"; tint: leader.value > 0 ? root.leaderColor : root.syncColor; on: syncOn.value > 0 }
+            Chip { label: "KEY LOCK"; tint: root.dim; on: keylock.value > 0 }
+            Chip { label: "Q"; tint: root.dim; on: quantize.value > 0 }
+            Chip { label: "LOOP " + loopSize.value; tint: root.syncColor; on: loopOn.value > 0 }
+        }
+        Text {
+            anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: status.verticalCenter
+            text: "BAR " + phrase.bar + "." + phrase.beatInBar + "  ·  " + root.clock(duration.value * playpos.value) + " / " + root.clock(duration.value)
+            color: root.dim; font.family: root.mono; font.pixelSize: 11
+        }
+
+        // Waveform: Mixxx's own renderers (RGB bands, stems, beat grid, hotcues, loop)
+        MixxxControls.WaveformDisplay {
+            id: wave
+            group: root.group
+            anchors.top: status.bottom; anchors.topMargin: 4
+            width: parent.width; height: 110
+            zoom: 3
+            backgroundColor: root.bg
+            Mixxx.WaveformRendererMarkRange {
+                Mixxx.WaveformMarkRange {
+                    startControl: "loop_start_position"; endControl: "loop_end_position"; enabledControl: "loop_enabled"
+                    color: "#3ddc84"; opacity: 0.25; disabledColor: "#ffffff"; disabledOpacity: 0.08
+                }
+            }
+            Mixxx.WaveformRendererRGB {
+                axesColor: "#00ffffff"; lowColor: "#2f6fff"; midColor: "#5fd4df"; highColor: "#dfe6ea"
+                gainAll: 1.0; gainLow: 1.0; gainMid: 0.9; gainHigh: 0.6
+            }
+            Mixxx.WaveformRendererStem { gainAll: 1.0 }
+            Mixxx.WaveformRendererBeat { color: "#40ffffff" }
+            Mixxx.WaveformRendererMark {
+                playMarkerColor: "#ff3b30"; playMarkerBackground: "transparent"
+                defaultMark: Mixxx.WaveformMark { align: "top|left"; color: "#ff8a1e"; textColor: "#0b0d10"; text: " %1 " }
+                untilMark.showTime: false; untilMark.showBeats: false
+            }
+        }
+
+        // Phrase timeline: current phrase + countdown, next cue in bars
+        Item {
+            id: phraseRow
+            x: 6; width: parent.width - 12
+            anchors.top: wave.bottom; anchors.topMargin: 6; height: 44
+            Text {
+                y: 0; text: "PHRASE " + phrase.number + "  ·  " + phrase.barInPhrase + "/" + phrase.phraseBars
+                color: root.dim; font.family: root.mono; font.pixelSize: 12; font.bold: true
+            }
+            Row {
+                anchors.right: parent.right; y: -3; spacing: 5
+                Text { id: barsLeftText; text: phrase.barsLeft.toFixed(1); color: phrase.barsLeft < 2 ? root.warn : root.text; font.family: root.mono; font.pixelSize: 18; font.bold: true }
+                Text { anchors.baseline: barsLeftText.baseline; text: "BARS  →  NEXT PHRASE"; color: root.dim; font.family: root.mono; font.pixelSize: 11; font.bold: true }
+            }
+            Row {   // bars of the current phrase, played ones filled, beat ticks in the current bar
+                id: blocks
+                anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                height: 18; spacing: 2
+                Repeater {
+                    model: phrase.phraseBars
+                    Rectangle {
+                        property int n: index + 1
+                        width: (blocks.width - (phrase.phraseBars - 1) * 2) / phrase.phraseBars; height: blocks.height; radius: 1
+                        color: n < phrase.barInPhrase ? "#2f6fff" : (n === phrase.barInPhrase ? "#1a2a44" : "#1a1f25")
+                        Row {
+                            visible: n === phrase.barInPhrase
+                            anchors.fill: parent; anchors.margins: 2; spacing: 1
+                            Repeater { model: 4; Rectangle { width: (parent.width - 3) / 4; height: parent.height; color: index < phrase.beatInBar ? "#5fd4df" : "transparent" } }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Next hotcue
+        Rectangle {
+            anchors.top: phraseRow.bottom; anchors.topMargin: 6
+            anchors.bottom: parent.bottom; anchors.bottomMargin: 4
+            x: 6; width: parent.width - 12; radius: 3; color: root.panel
+            Text {
+                anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                text: phrase.nextCue ? "NEXT CUE " + phrase.nextCue.n + (phrase.nextCue.label ? "  " + phrase.nextCue.label : "") : "NO CUE AHEAD"
+                color: phrase.nextCue ? root.leaderColor : root.faint; font.family: root.sans; font.pixelSize: 13; font.bold: true
+            }
+            Text {
+                anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                visible: phrase.nextCue !== null
+                text: phrase.barsToCue.toFixed(1) + " BARS"
+                color: root.text; font.family: root.mono; font.pixelSize: 16; font.bold: true
+            }
+        }
+    }
+}

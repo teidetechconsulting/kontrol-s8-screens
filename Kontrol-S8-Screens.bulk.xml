@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MixxxControllerPreset schemaVersion="1" mixxxVersion="2.6.0">
+  <info>
+    <name>Kontrol S8 Screens (QML)</name>
+    <author>Daniel (teidetechconsulting)</author>
+    <description>Phrase-oriented deck screens for the Traktor Kontrol S8, rendered in QML. Replaces the display mapping on the S8's bulk interface; use with the Kontrol S8 HID mapping.</description>
+    <devices>
+      <product protocol="bulk" vendor_id="0x17cc" product_id="0x1370" out_epaddr="0x04" interface_number="0x06" />
+    </devices>
+  </info>
+  <settings>
+    <option variable="phraseBars" type="integer" min="4" max="64" step="4" default="16"
+        label="Default phrase length (bars)">
+      <description>Used for tracks without phrase annotations.</description>
+    </option>
+  </settings>
+  <controller id="KontrolS8Screens">
+    <screens>
+      <screen identifier="left" width="480" height="272" targetFps="20" pixelType="RGB565" endian="big" splashoff="500" />
+      <screen identifier="right" width="480" height="272" targetFps="20" pixelType="RGB565" endian="big" splashoff="500" />
+    </screens>
+    <scriptfiles>
+      <file filename="KontrolS8Screen.qml" />
+    </scriptfiles>
+  </controller>
+</MixxxControllerPreset>
