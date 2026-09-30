@@ -14,7 +14,9 @@
       <description>Used for tracks without phrase annotations.</description>
     </option>
   </settings>
-  <controller id="KontrolS8Screens">
+  <!-- direction="out": IF6 has no IN endpoint; without it Mixxx starts a bulk
+       reader thread that spins on a full CPU core. -->
+  <controller id="KontrolS8Screens" direction="out">
     <screens>
       <screen identifier="left" width="480" height="272" targetFps="20" pixelType="RGB565" endian="big" splashoff="500" />
       <screen identifier="right" width="480" height="272" targetFps="20" pixelType="RGB565" endian="big" splashoff="500" />
