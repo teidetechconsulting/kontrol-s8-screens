@@ -9,7 +9,22 @@ Mixxx.ControllerScreen {
     id: root
     required property string screenId
     readonly property int screenIndex: screenId === "right" ? 1 : 0
-    property string group: screenId === "right" ? "[Channel2]" : "[Channel1]"
+    // Deck focus comes from the HID mapping via [S8Display],left_deck /
+    // right_deck (A/C on the left, B/D on the right).
+    Mixxx.ControlProxy {
+        id: focusDeck
+        group: "[S8Display]"
+        key: root.screenIndex === 1 ? "right_deck" : "left_deck"
+    }
+    readonly property int deck: focusDeck.value >= 1 && focusDeck.value <= 4
+            ? Math.round(focusDeck.value) : (screenIndex === 1 ? 2 : 1)
+    readonly property string deckLetter: "ABCD".charAt(deck - 1)
+    property string group: "[Channel" + deck + "]"
+    onGroupChanged: {
+        root.player = Mixxx.PlayerManager.getPlayer(root.group);
+        phrase.reloadBeats();
+        phrase.refreshNextCue();
+    }
     property var player: Mixxx.PlayerManager.getPlayer(root.group)
     // Stem layers draw over the RGB spectrum, so the deck waveform keeps them
     // off; the stems view will show them split into lanes.
@@ -180,8 +195,8 @@ Mixxx.ControllerScreen {
             Rectangle {
                 id: badge; width: 22; height: parent.height - 6; radius: 2
                 anchors.verticalCenter: parent.verticalCenter
-                color: "#2f8cff"
-                Text { anchors.centerIn: parent; text: root.screenIndex === 0 ? "A" : "B"; color: root.bg; font.family: root.sans; font.pixelSize: 17; font.bold: true }
+                color: root.deck <= 2 ? "#2f8cff" : "#e8ecef"   // A/B blue, C/D white (Traktor)
+                Text { anchors.centerIn: parent; text: root.deckLetter; color: root.bg; font.family: root.sans; font.pixelSize: 17; font.bold: true }
             }
             Column {
                 anchors.left: badge.right; anchors.leftMargin: 6; anchors.right: stats.left; anchors.rightMargin: 8
