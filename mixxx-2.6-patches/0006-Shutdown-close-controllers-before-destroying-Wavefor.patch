@@ -1,0 +1,87 @@
+From db65a6d324394764165d6321607fa11f9a135bf1 Mon Sep 17 00:00:00 2001
+From: Daniel <daniel@teide.tech>
+Date: Wed, 30 Sep 2026 19:48:47 +0200
+Subject: [PATCH] Shutdown: close controllers before destroying
+ WaveformWidgetFactory
+
+Controller screens keep rendering until the ControllerManager is deleted in
+CoreServices::finalize(), but MixxxMainWindow::finalize() destroys the
+WaveformWidgetFactory earlier. A frame rendered in between calls
+WaveformWidgetFactory::instance()->isStemSplitTracks() on nullptr (SEGV in
+allshader_sg::WaveformRenderBeat::preprocess on the controller render thread).
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ src/controllers/controllermanager.cpp | 11 +++++++++--
+ src/controllers/controllermanager.h   |  5 +++++
+ src/mixxxmainwindow.cpp               |  4 +++-
+ 3 files changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/src/controllers/controllermanager.cpp b/src/controllers/controllermanager.cpp
+index 20f9d48ebf..9c59f33c61 100644
+--- a/src/controllers/controllermanager.cpp
++++ b/src/controllers/controllermanager.cpp
+@@ -279,13 +279,20 @@ ControllerManager::ControllerManager(UserSettingsPointer pConfig)
+ }
+ 
+ ControllerManager::~ControllerManager() {
+-    emit requestShutdown();
+-    m_pThread->wait();
++    shutdown();
+     delete m_pThread;
+     delete m_pControllerLearningEventFilter;
+     ControllerScriptInterfaceLegacy::configureS8Preferences(UserSettingsWeakPointer());
+ }
+ 
++void ControllerManager::shutdown() {
++    if (m_pThread->isFinished()) {
++        return;
++    }
++    emit requestShutdown();
++    m_pThread->wait();
++}
++
+ ControllerLearningEventFilter* ControllerManager::getControllerLearningEventFilter() const {
+     return m_pControllerLearningEventFilter;
+ }
+diff --git a/src/controllers/controllermanager.h b/src/controllers/controllermanager.h
+index 7dfbf1fbf5..54e43ed900 100644
+--- a/src/controllers/controllermanager.h
++++ b/src/controllers/controllermanager.h
+@@ -44,6 +44,11 @@ class ControllerManager : public QObject {
+     /// Prevent other parts of Mixxx from having to manually connect to our slots
+     void setUpDevices() { emit requestSetUpDevices(); };
+ 
++    /// Close all controllers and stop the controller thread. Blocks until done.
++    /// Must run before WaveformWidgetFactory is destroyed: controller screens
++    /// render waveforms through it.
++    void shutdown();
++
+     static QList<QString> getMappingPaths(UserSettingsPointer pConfig);
+ 
+   signals:
+diff --git a/src/mixxxmainwindow.cpp b/src/mixxxmainwindow.cpp
+index 51b9314b19..d209da51b1 100644
+--- a/src/mixxxmainwindow.cpp
++++ b/src/mixxxmainwindow.cpp
+@@ -23,6 +23,7 @@
+ #include "widget/winitialglwidget.h"
+ #endif
+ 
++#include "controllers/controllermanager.h"
+ #include "controllers/keyboard/keyboardeventfilter.h"
+ #include "coreservices.h"
+ #include "defs_urls.h"
+@@ -546,7 +547,8 @@ MixxxMainWindow::~MixxxMainWindow() {
+ 
+     m_pCoreServices->getControlIndicatorTimer()->setLegacyVsyncEnabled(false);
+ 
+-    qDebug() << t.elapsed(false).debugMillisWithUnit() << "deleting ControllerManager";
++    qDebug() << t.elapsed(false).debugMillisWithUnit() << "shutting down controllers";
++    m_pCoreServices->getControllerManager()->shutdown();
+ 
+     WaveformWidgetFactory::destroy();
+ 
+-- 
+2.53.0
+
