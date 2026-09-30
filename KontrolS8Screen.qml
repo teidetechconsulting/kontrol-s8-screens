@@ -26,9 +26,11 @@ Mixxx.ControllerScreen {
         phrase.refreshNextCue();
     }
     property var player: Mixxx.PlayerManager.getPlayer(root.group)
-    // Stem layers draw over the RGB spectrum, so the deck waveform keeps them
-    // off; the stems view will show them split into lanes.
-    property bool showStems: false
+    // Stem tracks: stems as separate lanes (their colours; Mixxx falls back to
+    // its default palette when a file gives every stem the same colour).
+    // Other tracks: the RGB spectrum. The two renderers would paint over
+    // each other, so only one is visible at a time.
+    readonly property bool showStems: stemCount.value > 0
 
     // Theme
     readonly property color bg: "#0b0d10"
@@ -121,6 +123,7 @@ Mixxx.ControllerScreen {
     Co { id: loopOn; key: "loop_enabled" }
     Co { id: loopSize; key: "beatloop_size" }
     Co { id: playing; key: "play" }
+    Co { id: stemCount; key: "stem_count" }
 
     function clock(seconds) {
         if (!(seconds >= 0)) return "--:--";
@@ -269,9 +272,9 @@ Mixxx.ControllerScreen {
             // highs blue (kick = warm, vocals/synths = green, hats = blue).
             Mixxx.WaveformRendererRGB {
                 axesColor: "#00ffffff"; lowColor: "#ff3a1e"; midColor: "#37e05a"; highColor: "#2f8cff"
-                gainAll: 1.0; gainLow: 1.0; gainMid: 1.0; gainHigh: 1.0
+                gainAll: root.showStems ? 0.0 : 1.0; gainLow: 1.0; gainMid: 1.0; gainHigh: 1.0
             }
-            Mixxx.WaveformRendererStem { gainAll: root.showStems ? 1.0 : 0.0 }
+            Mixxx.WaveformRendererStem { gainAll: root.showStems ? 1.0 : 0.0; splitStemTracks: true }
             Mixxx.WaveformRendererBeat { color: "#40ffffff" }
             Mixxx.WaveformRendererMark {
                 playMarkerColor: "#ff3b30"; playMarkerBackground: "transparent"
