@@ -18,8 +18,8 @@
        reader thread that spins on a full CPU core. -->
   <controller id="KontrolS8Screens" direction="out">
     <screens>
-      <screen identifier="left" width="480" height="272" targetFps="20" pixelType="RGB565" endian="big" splashoff="500" />
-      <screen identifier="right" width="480" height="272" targetFps="20" pixelType="RGB565" endian="big" splashoff="500" />
+      <screen identifier="left" width="480" height="272" targetFps="30" pixelType="RGB565" endian="big" splashoff="500" transform="s8:0" />
+      <screen identifier="right" width="480" height="272" targetFps="30" pixelType="RGB565" endian="big" splashoff="500" transform="s8:1" />
     </screens>
     <scriptfiles>
       <file filename="KontrolS8Screen.qml" />
