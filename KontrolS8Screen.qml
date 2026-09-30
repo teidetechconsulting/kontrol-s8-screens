@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import Mixxx 1.0 as Mixxx
 import Mixxx.Controls 1.0 as MixxxControls
-import "S8Frame.mjs" as S8Frame
 
 // One Kontrol S8 display. "left" shows deck 1, "right" deck 2 (deck C/D
 // follow-up: take the focused deck from the HID mapping).
@@ -28,8 +27,45 @@ Mixxx.ControllerScreen {
     init: function(controllerName, isDebug) {}
     shutdown: function() {}
     transformFrame: function(input, timestamp) {
-        return S8Frame.encode(root.screenIndex, input);
+        return root.s8Encode(root.screenIndex, input);
     }
+
+    // S8FRAME-BEGIN — Kontrol S8 display frame: 16-byte header, run-length
+    // coded RGB565 pixel pairs, 8-byte footer. Format from kontrol-s8-protocol
+    // (CC-BY-4.0). Input is big-endian RGB565 (<screen endian="big">). Inline
+    // because Mixxx loads screen QML from its own qml dir, so relative imports
+    // do not resolve. Tested by test/s8frame.test.mjs.
+    function s8Encode(screen, input) {
+        var W = 480, H = 272, PAIRS = W * H / 2, MAX_RUN = 0xFFFF;
+        var bytes = new Uint8Array(input);
+        if (bytes.length !== W * H * 2)
+            throw new Error("S8 frame: expected " + (W * H * 2) + " bytes, got " + bytes.length);
+        var words = new Uint32Array(bytes.buffer, bytes.byteOffset, PAIRS);
+        var out = new Uint8Array(16 + PAIRS * 6 + 8);
+        out.set([0x84, 0, screen, 0x60, 0, 0, 0, 0, 0, 0, 0, 0, W >> 8, W & 0xFF, H >> 8, H & 0xFF]);
+        var o = 16, i = 0;
+        while (i < PAIRS) {
+            var j = i + 1;
+            while (j < PAIRS && words[j] === words[i] && j - i < MAX_RUN) j++;
+            if (j - i >= 2) {
+                var run = j - i;
+                out[o++] = 0x01; out[o++] = 0; out[o++] = run >> 8; out[o++] = run & 0xFF;
+                out.set(bytes.subarray(i * 4, i * 4 + 4), o); o += 4;
+                i = j;
+                continue;
+            }
+            var start = i;
+            i++;
+            while (i < PAIRS && i - start < MAX_RUN && !(i + 1 < PAIRS && words[i + 1] === words[i])) i++;
+            var count = i - start;
+            out[o++] = 0x00; out[o++] = 0; out[o++] = count >> 8; out[o++] = count & 0xFF;
+            out.set(bytes.subarray(start * 4, i * 4), o); o += count * 4;
+        }
+        out.set([0x03, 0, 0, 0, 0x40, 0, screen, 0], o); o += 8;
+        return out.buffer.slice(0, o);
+    }
+    // S8FRAME-END
+
 
     // ---- deck state -----------------------------------------------------
     component Co: Mixxx.ControlProxy { group: root.group }

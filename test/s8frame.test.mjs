@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import {encode, decode, WIDTH, HEIGHT} from "../S8Frame.mjs";
+import {readFileSync} from "node:fs";
+import {decode, WIDTH, HEIGHT} from "./s8decode.mjs";
+
+// Test the encoder exactly as it ships: extracted from the QML file.
+const qml = readFileSync(new URL("../KontrolS8Screen.qml", import.meta.url), "utf8");
+const body = qml.split("// S8FRAME-BEGIN")[1].split("// S8FRAME-END")[0];
+const encode = new Function(body.replace(/^[^\n]*\n/, "") + "\nreturn s8Encode;")();
 
 const size = WIDTH * HEIGHT * 2;
 

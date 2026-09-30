@@ -9,9 +9,8 @@ Needs Mixxx 2.6 built with `-DQML=ON`.
 | File | |
 |---|---|
 | `Kontrol-S8-Screens.bulk.xml` | mapping: two 480x272 RGB565 (big-endian) screens |
-| `KontrolS8Screen.qml` | the screen: header, status, Mixxx waveform, phrase timeline, next cue |
-| `S8Frame.mjs` | S8 frame envelope (header, RLE pixel pairs, footer) |
-| `test/s8frame.test.mjs` | `node test/s8frame.test.mjs` |
+| `KontrolS8Screen.qml` | the screen: header, status, Mixxx waveform, phrase timeline, next cue, and the S8 frame encoder (inline: Mixxx loads screen QML from its own qml dir, so relative imports don't resolve) |
+| `test/s8frame.test.mjs` | `node test/s8frame.test.mjs`: tests the encoder extracted from the QML file |
 
 Frame format from [kontrol-s8-protocol](https://github.com/gusgustavodj/kontrol-s8-protocol) (CC-BY-4.0).
 
