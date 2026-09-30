@@ -1,0 +1,223 @@
+From 5adf26a2ba0c687ba9dc837e84eca2c10763a390 Mon Sep 17 00:00:00 2001
+From: Daniel <daniel@teide.tech>
+Date: Wed, 30 Sep 2026 18:14:09 +0200
+Subject: [PATCH 4/5] Controller screens: native Kontrol S8 frame encoder
+ (transform="s8:N")
+
+The QML transformFrame runs on the controller thread, the same thread that
+handles HID input, so screen encoding in JS (~2 ms/frame, 40 frames/s) held
+fader and button input up. With <screen transform="s8:0"> frames are
+encoded in C++ instead (~22 us), sending only changed pixel pairs (skip
+runs) plus a full frame every 150 frames.
+
+Also: with --controller-debug every transformed frame was sent twice.
+---
+ src/controllers/legacycontrollermapping.h     |   4 +
+ .../legacycontrollermappingfilehandler.cpp    |  11 +-
+ .../legacy/controllerscriptenginelegacy.cpp   | 102 +++++++++++++++++-
+ .../legacy/controllerscriptenginelegacy.h     |   5 +
+ 4 files changed, 120 insertions(+), 2 deletions(-)
+
+diff --git a/src/controllers/legacycontrollermapping.h b/src/controllers/legacycontrollermapping.h
+index 1768096962..8b71ed74d1 100644
+--- a/src/controllers/legacycontrollermapping.h
++++ b/src/controllers/legacycontrollermapping.h
+@@ -122,6 +122,10 @@ class LegacyControllerMapping {
+         bool reversedColor;         // Whether or not the RGB is swapped BGR.
+         bool rawData;               // Whether or not the screen is allowed to receive bare
+                                     // data, not transformed.
++        // Native frame encoder, e.g. "s8:0" (Kontrol S8, screen 0). When set,
++        // frames are encoded in C++ and the QML transformFrame is not called:
++        // the JS transform runs on the controller thread and holds up input.
++        QString nativeTransform{};
+     };
+ #endif
+ 
+diff --git a/src/controllers/legacycontrollermappingfilehandler.cpp b/src/controllers/legacycontrollermappingfilehandler.cpp
+index 96d5f296a1..34bea15fd3 100644
+--- a/src/controllers/legacycontrollermappingfilehandler.cpp
++++ b/src/controllers/legacycontrollermappingfilehandler.cpp
+@@ -1,5 +1,7 @@
+ #include "controllers/legacycontrollermappingfilehandler.h"
+ 
++#include <QRegularExpression>
++
+ #include "controllers/defs_controllers.h"
+ #include "controllers/midi/legacymidicontrollermappingfilehandler.h"
+ #include "util/logger.h"
+@@ -112,6 +114,12 @@ bool parseAndAddScreenDefinition(const QDomElement& screen, LegacyControllerMapp
+     LOG_IF_NOT_OK("raw", "a boolean");
+     uint splashOff = screen.attribute("splashoff", "0").toUInt(&ok);
+     LOG_IF_NOT_OK("splashoff", "an unsigned integer");
++    QString nativeTransform = screen.attribute("transform", "").trimmed().toLower();
++    if (!nativeTransform.isEmpty() &&
++            !QRegularExpression(QStringLiteral("^s8:[01]$")).match(nativeTransform).hasMatch()) {
++        kLogger.warning() << "Unknown native screen transform" << nativeTransform;
++        return false;
++    }
+ 
+     if (!targetFps || targetFps > LegacyControllerMappingFileHandler::kMaxTargetFps) {
+         kLogger.warning()
+@@ -176,7 +184,8 @@ bool parseAndAddScreenDefinition(const QDomElement& screen, LegacyControllerMapp
+             pixelFormat,
+             endian,
+             reversedColor,
+-            rawData});
++            rawData,
++            nativeTransform});
+     return true;
+ }
+ #endif
+diff --git a/src/controllers/scripting/legacy/controllerscriptenginelegacy.cpp b/src/controllers/scripting/legacy/controllerscriptenginelegacy.cpp
+index 47f04ee788..03fcc13b10 100644
+--- a/src/controllers/scripting/legacy/controllerscriptenginelegacy.cpp
++++ b/src/controllers/scripting/legacy/controllerscriptenginelegacy.cpp
+@@ -26,6 +26,89 @@
+ using Clock = std::chrono::steady_clock;
+ #endif
+ 
++#ifdef MIXXX_USE_QML
++namespace {
++
++// Full frame every N frames even when nothing changed, so a lost transfer
++// never leaves a display stale for long (7.5 s at 20 fps).
++constexpr uint kNativeFullRefreshFrames = 150;
++
++// Traktor Kontrol S8 display frame, format from kontrol-s8-protocol
++// (CC-BY-4.0): 16-byte header, runs of RGB565 pixel pairs, 8-byte footer.
++// Run commands (op, 0, count hi, count lo): 0x00 literal pairs follow,
++// 0x01 one pair repeated count times, 0x02 skip count pairs (the display
++// keeps what it shows). With `previous`, unchanged pairs become skips, so a
++// frame where only the waveform moves is a few KB instead of 261 KB.
++QByteArray encodeKontrolS8Frame(int screen,
++        const QByteArray& pixels,
++        const QByteArray& previous,
++        int width,
++        int height) {
++    const int pairs = width * height / 2;
++    const auto* cur = reinterpret_cast<const quint32*>(pixels.constData());
++    const quint32* prev = previous.size() == pixels.size()
++            ? reinterpret_cast<const quint32*>(previous.constData())
++            : nullptr;
++    constexpr int kMaxRun = 0xFFFF;
++
++    QByteArray out;
++    out.reserve(16 + 8 + 4096);
++    auto byte = [&out](int value) { out.append(static_cast<char>(value & 0xFF)); };
++    auto command = [&byte](int op, int count) {
++        byte(op);
++        byte(0);
++        byte(count >> 8);
++        byte(count);
++    };
++    auto unchanged = [cur, prev](int index) { return prev && cur[index] == prev[index]; };
++
++    for (int value : {0x84, 0, screen, 0x60, 0, 0, 0, 0, 0, 0, 0, 0}) {
++        byte(value);
++    }
++    byte(width >> 8);
++    byte(width);
++    byte(height >> 8);
++    byte(height);
++
++    int i = 0;
++    while (i < pairs) {
++        if (unchanged(i)) {
++            int j = i + 1;
++            while (j < pairs && unchanged(j) && j - i < kMaxRun) {
++                ++j;
++            }
++            command(0x02, j - i);
++            i = j;
++            continue;
++        }
++        int j = i + 1;
++        while (j < pairs && cur[j] == cur[i] && !unchanged(j) && j - i < kMaxRun) {
++            ++j;
++        }
++        if (j - i >= 2) {
++            command(0x01, j - i);
++            out.append(reinterpret_cast<const char*>(cur + i), 4);
++            i = j;
++            continue;
++        }
++        const int start = i++;
++        while (i < pairs && i - start < kMaxRun && !unchanged(i) &&
++                !(i + 1 < pairs && cur[i + 1] == cur[i])) {
++            ++i;
++        }
++        command(0x00, i - start);
++        out.append(reinterpret_cast<const char*>(cur + start), (i - start) * 4);
++    }
++
++    for (int value : {0x03, 0, 0, 0, 0x40, 0, screen, 0}) {
++        byte(value);
++    }
++    return out;
++}
++
++} // namespace
++#endif
++
+ ControllerScriptEngineLegacy::ControllerScriptEngineLegacy(
+         Controller* controller, const RuntimeLoggingCategory& logger)
+         : ControllerScriptEngineBase(controller, logger) {
+@@ -544,6 +627,22 @@ void ControllerScriptEngineLegacy::handleScreenFrame(
+     // compilers that don't support it (e.g. older than Xcode 14.3/macOS 13)
+     QByteArray input(reinterpret_cast<const char*>(frame.constBits()), frame.sizeInBytes());
+ 
++    if (!screenInfo.nativeTransform.isEmpty()) {
++        // Parser only accepts "s8:0" / "s8:1".
++        const int screen = screenInfo.nativeTransform.section(':', 1).toInt();
++        uint& counter = m_nativeFrameCounters[screenInfo.identifier];
++        const bool fullFrame = counter++ % kNativeFullRefreshFrames == 0;
++        const QByteArray encoded = encodeKontrolS8Frame(screen,
++                input,
++                fullFrame ? QByteArray() : m_nativePreviousFrames.value(screenInfo.identifier),
++                screenInfo.size.width(),
++                screenInfo.size.height());
++        m_nativePreviousFrames.insert(screenInfo.identifier, input);
++        m_renderingScreens[screenInfo.identifier]->requestSendingFrameData(
++                m_pController, encoded);
++        return;
++    }
++
+     if (!pScreen->getTransform().isCallable() && screenInfo.rawData) {
+         m_renderingScreens[screenInfo.identifier]->requestSendingFrameData(m_pController, input);
+         return;
+@@ -602,7 +701,6 @@ void ControllerScriptEngineLegacy::handleScreenFrame(
+         qCDebug(m_logger) << "Transform screen data for screen " << screenInfo.identifier
+                           << "(first 64 bytes)"
+                           << QByteArray(transformedFrame.toHex(' '), 128);
+-        m_pController->sendBytes(returnedValue.view<QByteArray>());
+     }
+ 
+     m_renderingScreens[screenInfo.identifier]->requestSendingFrameData(
+@@ -633,6 +731,8 @@ void ControllerScriptEngineLegacy::shutdown() {
+     }
+ 
+     m_rootItems.clear();
++    m_nativePreviousFrames.clear();
++    m_nativeFrameCounters.clear();
+     for (const auto& pScreen : std::as_const(m_renderingScreens)) {
+         // When stopping, the rendering engine emits an event which triggers the
+         // shutdown in case it was initiated following a rendering issue. We
+diff --git a/src/controllers/scripting/legacy/controllerscriptenginelegacy.h b/src/controllers/scripting/legacy/controllerscriptenginelegacy.h
+index e073f92d87..cb4b56b0fe 100644
+--- a/src/controllers/scripting/legacy/controllerscriptenginelegacy.h
++++ b/src/controllers/scripting/legacy/controllerscriptenginelegacy.h
+@@ -127,6 +127,11 @@ class ControllerScriptEngineLegacy : public ControllerScriptEngineBase {
+     QList<LegacyControllerMapping::QMLModuleInfo> m_modules;
+     QList<LegacyControllerMapping::ScreenInfo> m_infoScreens;
+     QString m_resourcePath;
++    // Native screen encoders (ScreenInfo::nativeTransform): last frame sent per
++    // screen, for sending only changed pixels, and a frame counter for the
++    // periodic full refresh.
++    QHash<QString, QByteArray> m_nativePreviousFrames;
++    QHash<QString, uint> m_nativeFrameCounters;
+ #endif
+     QList<QJSValue> m_incomingDataFunctions;
+     QHash<QString, QJSValue> m_scriptWrappedFunctionCache;
+-- 
+2.53.0
+

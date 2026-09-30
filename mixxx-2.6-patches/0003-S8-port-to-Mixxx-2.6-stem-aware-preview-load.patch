@@ -1,0 +1,32 @@
+From 90be1a3cec5e170438b4f9728af3a5302910d03e Mon Sep 17 00:00:00 2001
+From: Daniel <daniel@teide.tech>
+Date: Wed, 30 Sep 2026 01:37:36 +0200
+Subject: [PATCH 3/5] S8: port to Mixxx 2.6 (stem-aware preview load)
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ .../scripting/legacy/controllerscriptinterfacelegacy.cpp   | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp b/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
+index 3b8dfc1688..23e6f4cfca 100644
+--- a/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
++++ b/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
+@@ -760,7 +760,14 @@ bool ControllerScriptInterfaceLegacy::s8PreviewSelected(bool play) {
+             if (!table || !table->currentIndex().isValid()) {
+                 continue;
+             }
++#ifdef __STEM__
++            // Empty stem mask: preview the full mix, not individual stems.
++            table->loadSelectedTrackToGroup(QStringLiteral("[PreviewDeck1]"),
++                    mixxx::StemChannelSelection(),
++                    true);
++#else
+             table->loadSelectedTrackToGroup(QStringLiteral("[PreviewDeck1]"), true);
++#endif
+             changed = true;
+             return;
+         }
+-- 
+2.53.0
+
