@@ -29,8 +29,14 @@ Mixxx.ControllerScreen {
 
     init: function(controllerName, isDebug) {}
     shutdown: function() {}
+    // transformFrame runs on Mixxx's controller thread, the same thread that
+    // handles fader and button input. The RLE loop in s8Encode costs ms per
+    // frame in QJSEngine; the raw envelope is one native copy, so input is
+    // never held up behind screen encoding. Costs more USB (~261 KB/frame).
+    property bool rleFrames: false
     transformFrame: function(input, timestamp) {
-        return root.s8Encode(root.screenIndex, input);
+        return root.rleFrames ? root.s8Encode(root.screenIndex, input)
+                              : root.s8EncodeRaw(root.screenIndex, input);
     }
 
     // S8FRAME-BEGIN — Kontrol S8 display frame: 16-byte header, run-length
@@ -66,6 +72,20 @@ Mixxx.ControllerScreen {
         }
         out.set([0x03, 0, 0, 0, 0x40, 0, screen, 0], o); o += 8;
         return out.buffer.slice(0, o);
+    }
+
+    // Whole frame as one literal run (65280 pairs fits the 16-bit count).
+    function s8EncodeRaw(screen, input) {
+        var W = 480, H = 272, PAIRS = W * H / 2;
+        var bytes = new Uint8Array(input);
+        if (bytes.length !== W * H * 2)
+            throw new Error("S8 frame: expected " + (W * H * 2) + " bytes, got " + bytes.length);
+        var out = new Uint8Array(16 + 4 + bytes.length + 8);
+        out.set([0x84, 0, screen, 0x60, 0, 0, 0, 0, 0, 0, 0, 0, W >> 8, W & 0xFF, H >> 8, H & 0xFF]);
+        out.set([0x00, 0, PAIRS >> 8, PAIRS & 0xFF], 16);
+        out.set(bytes, 20);
+        out.set([0x03, 0, 0, 0, 0x40, 0, screen, 0], 20 + bytes.length);
+        return out.buffer;
     }
     // S8FRAME-END
 

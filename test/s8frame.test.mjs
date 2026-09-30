@@ -5,11 +5,13 @@ import {decode, WIDTH, HEIGHT} from "./s8decode.mjs";
 // Test the encoder exactly as it ships: extracted from the QML file.
 const qml = readFileSync(new URL("../KontrolS8Screen.qml", import.meta.url), "utf8");
 const body = qml.split("// S8FRAME-BEGIN")[1].split("// S8FRAME-END")[0];
-const encode = new Function(body.replace(/^[^\n]*\n/, "") + "\nreturn s8Encode;")();
+const fns = new Function(body.replace(/^[^\n]*\n/, "") + "\nreturn {s8Encode, s8EncodeRaw};")();
+const encoders = {rle: fns.s8Encode, raw: fns.s8EncodeRaw};
 
 const size = WIDTH * HEIGHT * 2;
 
 function roundTrip(name, fill) {
+  for (const [kind, encode] of Object.entries(encoders)) {
     const px = new Uint8Array(size);
     fill(px);
     const frame = encode(1, px.buffer);
@@ -22,7 +24,8 @@ function roundTrip(name, fill) {
     const f = new Uint8Array(frame);
     assert.deepEqual([...f.subarray(0, 4)], [0x84, 0, 1, 0x60], name + ": header");
     assert.deepEqual([...f.subarray(f.length - 8)], [0x03, 0, 0, 0, 0x40, 0, 1, 0], name + ": footer");
-    console.log(`${name.padEnd(12)} ok  ${f.length} bytes`);
+    console.log(`${(kind + " " + name).padEnd(14)} ok  ${f.length} bytes`);
+  }
 }
 
 roundTrip("black", () => {});
