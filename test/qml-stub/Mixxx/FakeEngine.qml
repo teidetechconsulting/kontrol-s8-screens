@@ -4,13 +4,16 @@ import QtQuick
 // `engine.` to `Mixxx.FakeEngine.` in a copy of the screen.
 QtObject {
     // Scenario from the last command-line argument: 0 deck, 1 browser,
-    // 2 browser + SORT BY popup, 3 deck + tempo popup
+    // 2 browser + SORT BY popup, 3 deck + tempo popup, 4 stem deck
     property int scenario: Number(Qt.application.arguments[Qt.application.arguments.length - 1]) || 0
     property int context: scenario === 1 || scenario === 2 ? 1 : 0
     property var controls: {
         var c = {bpm: 123.98, duration: 412, playposition: 0.43, track_loaded: 1, quantize: 1, beatloop_size: 8};
         if (scenario === 2) { c.left_popup_kind = 3; c.left_popup_title = 2; c.left_popup_pending_index = 2; c.left_popup_pending_descending = 1; }
         if (scenario === 3) { c.left_popup_kind = 1; c.left_popup_title = 1; c.left_popup_value = 124; c.left_popup_has_value = 1; }
+        if (scenario === 4) {
+            c.stem_count = 4; c.super1 = 0.5; c.loaded_chain_preset = 1; c.mute = 0;
+        }
         return c;
     }
     function getSetting(name) { return undefined; }

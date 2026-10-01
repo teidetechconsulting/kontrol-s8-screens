@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Render KontrolS8Screen.qml offline with stub Mixxx modules.
-# Usage: test/render-preview.sh <scenario: 0 deck, 1 browser, 2 sort popup, 3 tempo popup> <out.png>
+# Usage: test/render-preview.sh <scenario: 0 deck, 1 browser, 2 sort popup, 3 tempo popup, 4 stem deck> <out.png>
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
