@@ -381,6 +381,64 @@ Mixxx.ControllerScreen {
             }
         }
 
+        // BPM panel (screen button 2): edits the track's beat grid. Labels sit
+        // next to the S8 screen buttons, four per side.
+        Rectangle {
+            id: bpmPanel
+            Mixxx.ControlProxy { id: activePanel; group: "[S8Display]"; key: root.sidePrefix + "active_panel" }
+            Mixxx.ControlProxy { id: fileBpm; group: root.group; key: "file_bpm" }
+            Mixxx.ControlProxy { id: undoPossible; group: root.group; key: "beats_undo_possible" }
+            visible: Math.round(activePanel.value) === 1 && !root.browsing
+            anchors.fill: parent
+            color: root.bg
+            component SoftKey: Rectangle {
+                property string label
+                property bool onRight: false
+                property int slot: 0          // 0..3 from the top
+                property bool active: true
+                x: onRight ? parent.width - width - 2 : 2
+                y: 34 + slot * 68 - height / 2
+                width: 92; height: 22; radius: 2
+                color: active ? "#1a2a44" : "#14181d"
+                Text {
+                    anchors.centerIn: parent; text: parent.label
+                    color: parent.active ? root.text : root.faint
+                    font.family: root.sans; font.pixelSize: 11; font.bold: true
+                }
+            }
+            SoftKey { slot: 0; label: "TAP" }
+            SoftKey { slot: 1; label: "CLOSE" }
+            SoftKey { slot: 2; label: "BEAT HERE" }
+            SoftKey { slot: 3; label: "BPM ½" }
+            SoftKey { slot: 0; onRight: true; label: "UNDO"; active: undoPossible.value > 0 }
+            SoftKey { slot: 1; onRight: true; label: "◀ GRID" }
+            SoftKey { slot: 2; onRight: true; label: "GRID ▶" }
+            SoftKey { slot: 3; onRight: true; label: "BPM ×2" }
+            Column {
+                anchors.centerIn: parent
+                spacing: 4
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "TRACK BPM"; color: root.dim; font.family: root.sans; font.pixelSize: 11; font.bold: true
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: fileBpm.value > 0 ? fileBpm.value.toFixed(2) : "--"
+                    color: root.text; font.family: root.mono; font.pixelSize: 40; font.bold: true
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "PLAYING " + (bpm.value > 0 ? bpm.value.toFixed(2) : "--")
+                    color: root.dim; font.family: root.mono; font.pixelSize: 12
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "BROWSE ±1  ·  SHIFT ±0.01"
+                    color: root.faint; font.family: root.sans; font.pixelSize: 10
+                }
+            }
+        }
+
         // Browser: replaces the deck view while BROWSE is active
         Rectangle {
             id: browserView

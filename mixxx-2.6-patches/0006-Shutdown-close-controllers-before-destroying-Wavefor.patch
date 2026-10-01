@@ -1,7 +1,7 @@
 From db65a6d324394764165d6321607fa11f9a135bf1 Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Wed, 30 Sep 2026 19:48:47 +0200
-Subject: [PATCH 06/11] Shutdown: close controllers before destroying
+Subject: [PATCH 06/12] Shutdown: close controllers before destroying
  WaveformWidgetFactory
 
 Controller screens keep rendering until the ControllerManager is deleted in

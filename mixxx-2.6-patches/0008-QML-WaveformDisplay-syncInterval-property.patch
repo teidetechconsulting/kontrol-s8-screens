@@ -1,7 +1,7 @@
 From eae5a75c3b9a76df1e06316ed650040c1dd4bc09 Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Thu, 1 Oct 2026 14:10:37 +0200
-Subject: [PATCH 08/11] QML WaveformDisplay: syncInterval property
+Subject: [PATCH 08/12] QML WaveformDisplay: syncInterval property
 
 The play position is predicted one display frame ahead, with a fixed 100 ms
 frame interval. Controller screens at 30 fps then show the waveform ~70 ms

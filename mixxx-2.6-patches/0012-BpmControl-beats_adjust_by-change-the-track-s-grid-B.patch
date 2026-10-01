@@ -1,0 +1,71 @@
+From fdd6a33bcdb82ecca37b35471343dd0bc54e6586 Mon Sep 17 00:00:00 2001
+From: Daniel <daniel@teide.tech>
+Date: Fri, 2 Oct 2026 01:38:41 +0200
+Subject: [PATCH 12/12] BpmControl: beats_adjust_by (change the track's grid
+ BPM by a given delta)
+
+beats_adjust_faster/slower step by 0.01 only; a controller that wants
+whole-BPM steps would need a hundred presses, each rewriting the grid.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ src/engine/controls/bpmcontrol.cpp | 14 ++++++++++++++
+ src/engine/controls/bpmcontrol.h   |  3 +++
+ 2 files changed, 17 insertions(+)
+
+diff --git a/src/engine/controls/bpmcontrol.cpp b/src/engine/controls/bpmcontrol.cpp
+index bd088f18b7..cf74a1f80a 100644
+--- a/src/engine/controls/bpmcontrol.cpp
++++ b/src/engine/controls/bpmcontrol.cpp
+@@ -86,6 +86,12 @@ BpmControl::BpmControl(const QString& group,
+             this,
+             &BpmControl::slotAdjustBeatsFaster,
+             Qt::DirectConnection);
++    m_pAdjustBeatsBy = std::make_unique<ControlObject>(ConfigKey(group, "beats_adjust_by"));
++    connect(m_pAdjustBeatsBy.get(),
++            &ControlObject::valueChanged,
++            this,
++            &BpmControl::slotAdjustBeatsBy,
++            Qt::DirectConnection);
+     m_pAdjustBeatsSlower = std::make_unique<ControlPushButton>(
+             ConfigKey(group, "beats_adjust_slower"), false);
+     m_pAdjustBeatsSlower->setKbdRepeatable(true);
+@@ -303,6 +309,14 @@ void BpmControl::slotAdjustBeatsFaster(double v) {
+     adjustBeatsBpm(kBpmAdjustStep);
+ }
+ 
++void BpmControl::slotAdjustBeatsBy(double v) {
++    if (v == 0) {
++        return;
++    }
++    adjustBeatsBpm(v);
++    m_pAdjustBeatsBy->set(0);
++}
++
+ void BpmControl::slotAdjustBeatsSlower(double v) {
+     if (v <= 0) {
+         return;
+diff --git a/src/engine/controls/bpmcontrol.h b/src/engine/controls/bpmcontrol.h
+index 2f0172b856..6457b9dc39 100644
+--- a/src/engine/controls/bpmcontrol.h
++++ b/src/engine/controls/bpmcontrol.h
+@@ -99,6 +99,7 @@ class BpmControl : public EngineControl {
+ 
+   private slots:
+     void slotAdjustBeatsFaster(double);
++    void slotAdjustBeatsBy(double);
+     void slotAdjustBeatsSlower(double);
+     void slotTranslateBeatsEarlier(double);
+     void slotTranslateBeatsLater(double);
+@@ -147,6 +148,8 @@ class BpmControl : public EngineControl {
+     // The average bpm around the current playposition;
+     std::unique_ptr<ControlObject> m_pLocalBpm;
+     std::unique_ptr<ControlPushButton> m_pAdjustBeatsFaster;
++    // Set to a BPM delta (e.g. 1 or -0.01) to change the grid by it; reads back 0.
++    std::unique_ptr<ControlObject> m_pAdjustBeatsBy;
+     std::unique_ptr<ControlPushButton> m_pAdjustBeatsSlower;
+     std::unique_ptr<ControlPushButton> m_pTranslateBeatsEarlier;
+     std::unique_ptr<ControlPushButton> m_pTranslateBeatsLater;
+-- 
+2.55.0
+

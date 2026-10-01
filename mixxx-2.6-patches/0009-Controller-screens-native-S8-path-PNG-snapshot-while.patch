@@ -1,7 +1,7 @@
 From c5972d1c22540fdee6827c285b32e5ca4a441a31 Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Thu, 1 Oct 2026 16:14:06 +0200
-Subject: [PATCH 09/11] Controller screens (native S8 path): PNG snapshot while
+Subject: [PATCH 09/12] Controller screens (native S8 path): PNG snapshot while
  /tmp/s8-snapshot exists
 
 Debug aid: writes /tmp/s8-screen-<id>.png about once per second, so what the

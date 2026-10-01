@@ -1,7 +1,7 @@
 From 72ced48f4940582dcf33657082d957accc2ac6a3 Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Wed, 30 Sep 2026 18:36:00 +0200
-Subject: [PATCH 05/11] Stems: default palette when a file gives every stem the
+Subject: [PATCH 05/12] Stems: default palette when a file gives every stem the
  same colour
 
 Traktor's built-in stem separation writes #3f007b for every stem, so all
