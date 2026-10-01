@@ -1,0 +1,58 @@
+From eae5a75c3b9a76df1e06316ed650040c1dd4bc09 Mon Sep 17 00:00:00 2001
+From: Daniel <daniel@teide.tech>
+Date: Thu, 1 Oct 2026 14:10:37 +0200
+Subject: [PATCH] QML WaveformDisplay: syncInterval property
+
+The play position is predicted one display frame ahead, with a fixed 100 ms
+frame interval. Controller screens at 30 fps then show the waveform ~70 ms
+early. Expose the interval so a screen can set its real frame time.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ src/qml/qmlwaveformdisplay.h | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/src/qml/qmlwaveformdisplay.h b/src/qml/qmlwaveformdisplay.h
+index 77f2d445b5..baa8e5e0a7 100644
+--- a/src/qml/qmlwaveformdisplay.h
++++ b/src/qml/qmlwaveformdisplay.h
+@@ -42,6 +42,11 @@ class QmlWaveformDisplay : public QQuickItem, VSyncTimeProvider, public Waveform
+     Q_PROPERTY(double zoom READ getZoom WRITE setZoom NOTIFY zoomChanged)
+     Q_PROPERTY(QColor backgroundColor READ getBackgroundColor WRITE
+                     setBackgroundColor NOTIFY backgroundColorChanged)
++    /// Milliseconds between displayed frames. The play position is predicted
++    /// this far ahead, so it must match the real frame rate (e.g. 33 for a
++    /// controller screen at 30 fps); a larger value runs the waveform early.
++    Q_PROPERTY(int syncInterval READ getSyncIntervalMs WRITE setSyncIntervalMs
++                    NOTIFY syncIntervalChanged)
+     Q_CLASSINFO("DefaultProperty", "renderers")
+     QML_NAMED_ELEMENT(WaveformDisplay)
+ 
+@@ -71,6 +76,16 @@ class QmlWaveformDisplay : public QQuickItem, VSyncTimeProvider, public Waveform
+     std::chrono::microseconds getSyncInterval() const override {
+         return m_syncInterval;
+     }
++    int getSyncIntervalMs() const {
++        return static_cast<int>(m_syncInterval.count());
++    }
++    void setSyncIntervalMs(int intervalMs) {
++        if (intervalMs <= 0 || intervalMs == getSyncIntervalMs()) {
++            return;
++        }
++        m_syncInterval = std::chrono::milliseconds(intervalMs);
++        emit syncIntervalChanged();
++    }
+ 
+     void componentComplete() override;
+ 
+@@ -92,6 +107,7 @@ class QmlWaveformDisplay : public QQuickItem, VSyncTimeProvider, public Waveform
+     void zoomChanged();
+     void groupChanged(const QString& group);
+     void backgroundColorChanged();
++    void syncIntervalChanged();
+ 
+   private:
+     void setCurrentTrack(TrackPointer pTrack);
+-- 
+2.55.0
+

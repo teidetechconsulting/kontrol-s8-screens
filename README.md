@@ -17,7 +17,7 @@ GL context for controller screens fails.
 | `KontrolS8Screen.qml` | the screen: header, status, Mixxx waveform, phrase timeline, next cue, and the S8 frame encoder (inline: Mixxx loads screen QML from its own qml dir, so relative imports don't resolve) |
 | `test/s8frame.test.mjs` | `node test/s8frame.test.mjs`: tests the encoder extracted from the QML file |
 
-| `mixxx-2.6-patches/` | Mixxx 2.6 patches on top of the [S8 HID/display patch](https://github.com/gusgustavodj/kontrol-s8-mixxx-mappings): Linux browser fix, 2.6 port, native S8 frame encoder, stem colour fallback (Traktor-made stems give every stem the same colour), shutdown crash fix (controller screens rendered after the waveform factory was destroyed), sorting from the browser tree |
+| `mixxx-2.6-patches/` | Mixxx 2.6 patches on top of the [S8 HID/display patch](https://github.com/gusgustavodj/kontrol-s8-mixxx-mappings): Linux browser fix, 2.6 port, native S8 frame encoder, stem colour fallback (Traktor-made stems give every stem the same colour), shutdown crash fix (controller screens rendered after the waveform factory was destroyed), sorting from the browser tree, settable waveform frame interval (the needle ran ~70 ms early on 30 fps screens) |
 
 Install: on Mixxx `2.6`, apply the upstream S8 patch, then `git am
 mixxx-2.6-patches/*.patch`, and build with `-DQML=ON -DSTEM=ON`. Copy or

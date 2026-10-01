@@ -297,6 +297,10 @@ Mixxx.ControllerScreen {
             width: parent.width; height: 110
             zoom: 3
             backgroundColor: root.bg
+            // The play position is predicted one frame ahead; Mixxx assumes
+            // 100 ms unless told the real interval (33 ms at 30 fps). Older
+            // builds lack the property.
+            Component.onCompleted: if ("syncInterval" in wave) wave.syncInterval = 33
             Mixxx.WaveformRendererMarkRange {
                 Mixxx.WaveformMarkRange {
                     startControl: "loop_start_position"; endControl: "loop_end_position"; enabledControl: "loop_enabled"
