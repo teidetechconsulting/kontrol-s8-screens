@@ -399,7 +399,6 @@ Mixxx.ControllerScreen {
                     Item {   // an Item: the model's "color" role would override a Rectangle's colour
                         id: stemCell
                         required property int index
-                        required property string label
                         required property color color
                         readonly property string fxGroup: "[QuickEffectRack1_" + root.group.slice(0, -1) + "_Stem" + (index + 1) + "]]"
                         Mixxx.ControlProxy { id: stemSuper; group: stemCell.fxGroup; key: "super1" }
@@ -413,13 +412,14 @@ Mixxx.ControllerScreen {
                             id: stemText
                             x: 7; anchors.verticalCenter: parent.verticalCenter; width: parent.width * 0.64 - 7
                             elide: Text.ElideRight
-                            text: stemCell.label.toUpperCase() + " " + root.presetName(stemPreset.value)
+                            text: root.presetName(stemPreset.value)
                             color: root.text; font.family: root.sans; font.pixelSize: 9; font.bold: true
                         }
                         Rectangle {   // knob position
                             anchors.left: stemText.right; anchors.leftMargin: 3; anchors.right: parent.right
                             anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
                             height: 4; radius: 1; color: "#2a3139"
+                            Rectangle { x: (parent.width - width) / 2; y: -2; width: 1; height: parent.height + 4; color: root.dim }   // neutral
                             Rectangle { width: 3; height: parent.height; color: stemCell.color; x: stemSuper.value * (parent.width - 3) }
                         }
                     }
