@@ -28,9 +28,10 @@ Mixxx.ControllerScreen {
     property var player: Mixxx.PlayerManager.getPlayer(root.group)
     // Stem tracks: stems as separate lanes (their colours; Mixxx falls back to
     // its default palette when a file gives every stem the same colour).
-    // Other tracks: the RGB spectrum. The two renderers would paint over
-    // each other, so only one is visible at a time.
-    readonly property bool showStems: stemCount.value > 0
+    // Other tracks: the RGB spectrum. Mixxx picks per track (the RGB renderer
+    // skips waveforms with stem data, the stem renderer needs it), so both
+    // stay at full gain: a gain toggled from QML did not always reach the
+    // renderer and left one screen with a flat line.
 
     // Theme
     readonly property color bg: "#0b0d10"
@@ -123,7 +124,6 @@ Mixxx.ControllerScreen {
     Co { id: loopOn; key: "loop_enabled" }
     Co { id: loopSize; key: "beatloop_size" }
     Co { id: playing; key: "play" }
-    Co { id: stemCount; key: "stem_count" }
 
     function clock(seconds) {
         if (!(seconds >= 0)) return "--:--";
@@ -312,9 +312,9 @@ Mixxx.ControllerScreen {
             // highs blue (kick = warm, vocals/synths = green, hats = blue).
             Mixxx.WaveformRendererRGB {
                 axesColor: "#00ffffff"; lowColor: "#ff3a1e"; midColor: "#37e05a"; highColor: "#2f8cff"
-                gainAll: root.showStems ? 0.0 : 1.0; gainLow: 1.0; gainMid: 1.0; gainHigh: 1.0
+                gainAll: 1.0; gainLow: 1.0; gainMid: 1.0; gainHigh: 1.0
             }
-            Mixxx.WaveformRendererStem { gainAll: root.showStems ? 1.0 : 0.0; splitStemTracks: true }
+            Mixxx.WaveformRendererStem { gainAll: 1.0; splitStemTracks: true }
             Mixxx.WaveformRendererBeat { color: "#40ffffff" }
             Mixxx.WaveformRendererMark {
                 playMarkerColor: "#ff3b30"; playMarkerBackground: "transparent"
