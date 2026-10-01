@@ -1,7 +1,7 @@
 From 13e74dd7c53f84dfe570dabca3b599bfb610f184 Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Wed, 30 Sep 2026 00:22:51 +0200
-Subject: [PATCH 02/10] S8: explicit browser level, focus-independent enter,
+Subject: [PATCH 02/11] S8: explicit browser level, focus-independent enter,
  Back reports top level
 
 Co-authored-by: Cursor <cursoragent@cursor.com>

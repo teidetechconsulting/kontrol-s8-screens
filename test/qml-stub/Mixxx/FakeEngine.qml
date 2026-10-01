@@ -23,7 +23,7 @@ QtObject {
                  ["Alisios (Extended Dub With A Very Long Name)", "Trade Winds", 122.5, "8A", 503], ["Calima", "Sahara Haze", 120.0, "10A", 360],
                  ["Lava Flow (Original Mix)", "Timanfaya", 124.0, "8A", 412], ["Charco Azul", "La Palma Sound System", 123.5, "9B", 431],
                  ["Barranco", "Gomera Silbo", 121.0, "6A", 388]];
-        var r = t.map(function(x) { return {type: "track", title: x[0], artist: x[1], bpm: x[2], key: x[3], duration: x[4]}; });
+        var r = t.map(function(x, i) { return {type: "track", title: x[0], artist: x[1], bpm: x[2], key: x[3], duration: x[4], stems: i % 3 === 1}; });
         return {available: true, mode: "tracks", path: "BROWSER > Crates > Lavaland 001", selectedIndex: 4,
                 sortLabel: "BPM", sortDescending: false, previewPlaying: true, rows: r,
                 sortCriteria: ["Title", "Artist", "BPM", "Date Added", "#", "Key"].map(function(l, i) { return {id: i, label: l}; })};

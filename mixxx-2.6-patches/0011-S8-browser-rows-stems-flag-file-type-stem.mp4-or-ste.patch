@@ -1,0 +1,36 @@
+From 3920acdb61d53ae361cb84627dca45d76bf2740c Mon Sep 17 00:00:00 2001
+From: Daniel <daniel@teide.tech>
+Date: Thu, 1 Oct 2026 21:44:45 +0200
+Subject: [PATCH 11/11] S8 browser rows: stems flag (file type stem.mp4 or stem
+ info)
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ .../legacy/controllerscriptinterfacelegacy.cpp        | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp b/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
+index cff34e8ff4..fd3a2e29dd 100644
+--- a/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
++++ b/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
+@@ -319,7 +319,16 @@ QVariantMap browserStateOnGuiThread(int requestedVisibleRows) {
+                 {QStringLiteral("artist"), pTrack->getArtist()},
+                 {QStringLiteral("bpm"), pTrack->getBpm()},
+                 {QStringLiteral("key"), pTrack->getKeyText()},
+-                {QStringLiteral("duration"), pTrack->getDuration()}});
++                {QStringLiteral("duration"), pTrack->getDuration()},
++                // Stem info is only read when a file is opened; the file type
++                // ("stem.mp4") is known for every library track.
++                {QStringLiteral("stems"),
++                        pTrack->getType().startsWith(QStringLiteral("stem"))
++#ifdef __STEM__
++                                || !pTrack->getStemInfo().isEmpty()
++#endif
++                },
++        });
+     }
+     const QModelIndex selectedIndex = pTable->currentIndex();
+     const TrackPointer pSelectedTrack = selectedIndex.isValid()
+-- 
+2.55.0
+

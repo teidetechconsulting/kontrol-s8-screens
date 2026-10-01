@@ -481,8 +481,16 @@ Mixxx.ControllerScreen {
                                 text: (row.type === "folder" ? (row.expandable ? "▸ " : "  ") : "") + (row.title || "")
                                 color: root.text; font.family: root.sans; font.pixelSize: 14; font.bold: parent.parent.isSelected
                             }
+                            Rectangle {
+                                id: stemBadge
+                                visible: row.stems === true
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: stemBadgeText.implicitWidth + 6; height: 13; radius: 2; color: "#009E73"
+                                Text { id: stemBadgeText; anchors.centerIn: parent; text: "STEMS"; color: root.bg; font.family: root.sans; font.pixelSize: 8; font.bold: true }
+                            }
                             Text {
                                 width: names.width - title.width - names.spacing
+                                       - (stemBadge.visible ? stemBadge.width + names.spacing : 0)
                                 elide: Text.ElideRight
                                 text: row.artist || ""
                                 color: root.dim; font.family: root.sans; font.pixelSize: 13
