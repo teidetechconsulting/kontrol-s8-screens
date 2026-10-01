@@ -1,0 +1,122 @@
+From a2aa4ccb29b67915a9ccaf4d0f2ceb78dfc5dbe4 Mon Sep 17 00:00:00 2001
+From: Daniel <daniel@teide.tech>
+Date: Thu, 1 Oct 2026 14:02:35 +0200
+Subject: [PATCH] S8: browser sort criteria also while the sidebar tree is
+ focused
+
+The track list of the selected sidebar item stays visible, but the tree
+branch of getS8BrowserState returned before filling sortCriteria, so the S8
+sort knob did nothing there (BROWSER_SORT_UNAVAILABLE).
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ .../controllerscriptinterfacelegacy.cpp       | 79 +++++++++++--------
+ 1 file changed, 45 insertions(+), 34 deletions(-)
+
+diff --git a/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp b/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
+index 23e6f4cfca..cff34e8ff4 100644
+--- a/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
++++ b/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
+@@ -179,6 +179,47 @@ void runOnGuiThread(F&& function) {
+     }
+ }
+ 
++void appendBrowserSortState(QVariantMap* pState, WLibrary* pLibrary) {
++    WTrackTableView* pTable = pLibrary ? pLibrary->getCurrentTrackTableView() : nullptr;
++    auto* pTrackModel = pTable ? dynamic_cast<TrackModel*>(pTable->model()) : nullptr;
++    QHeaderView* pHeader = pTable ? pTable->horizontalHeader() : nullptr;
++    if (!pTrackModel || !pHeader) {
++        return;
++    }
++    const int section = pHeader->sortIndicatorSection();
++    (*pState)[QStringLiteral("sortColumnId")] = static_cast<int>(
++            pTrackModel->sortColumnIdFromColumnIndex(section));
++    (*pState)[QStringLiteral("sortLabel")] = section >= 0
++            ? pTable->model()->headerData(section, Qt::Horizontal, Qt::DisplayRole).toString()
++            : QString();
++    (*pState)[QStringLiteral("sortDescending")] =
++            pHeader->sortIndicatorOrder() == Qt::DescendingOrder;
++    QVariantList sortCriteria;
++    const TrackModel::SortColumnId s8SortCriteria[] = {
++            TrackModel::SortColumnId::Title,
++            TrackModel::SortColumnId::Artist,
++            TrackModel::SortColumnId::Bpm,
++            TrackModel::SortColumnId::DateTimeAdded,
++            TrackModel::SortColumnId::TrackNumber,
++            TrackModel::SortColumnId::Key,
++    };
++    for (const auto columnId : s8SortCriteria) {
++        const int column = pTrackModel->columnIndexFromSortColumnId(columnId);
++        if (column < 0 || !pTrackModel->isColumnSortable(column)) {
++            continue;
++        }
++        const QString label = pTable->model()
++                                      ->headerData(column, Qt::Horizontal, Qt::DisplayRole)
++                                      .toString();
++        if (!label.isEmpty()) {
++            sortCriteria.append(QVariantMap{
++                    {QStringLiteral("id"), static_cast<int>(columnId)},
++                    {QStringLiteral("label"), label}});
++        }
++    }
++    (*pState)[QStringLiteral("sortCriteria")] = sortCriteria;
++}
++
+ QVariantMap browserStateOnGuiThread(int requestedVisibleRows) {
+     const int visibleRows = qBound(4, requestedVisibleRows, 9);
+     QVariantMap state{
+@@ -243,6 +284,9 @@ QVariantMap browserStateOnGuiThread(int requestedVisibleRows) {
+                 : path.join(QStringLiteral(" > "));
+         state[QStringLiteral("selectedIndex")] = selectedRow - first;
+         state[QStringLiteral("rows")] = rows;
++        // The track list of the selected sidebar item stays visible, so it can
++        // be sorted from the tree too.
++        appendBrowserSortState(&state, pLibrary);
+         return state;
+     }
+ 
+@@ -297,40 +341,7 @@ QVariantMap browserStateOnGuiThread(int requestedVisibleRows) {
+     state[QStringLiteral("selectedIdentity")] = pSelectedTrack
+             ? pSelectedTrack->getLocation()
+             : QString();
+-    if (QHeaderView* pHeader = pTable->horizontalHeader()) {
+-        const int section = pHeader->sortIndicatorSection();
+-        state[QStringLiteral("sortColumnId")] = static_cast<int>(
+-                pTrackModel->sortColumnIdFromColumnIndex(section));
+-        state[QStringLiteral("sortLabel")] = section >= 0
+-                ? pTable->model()->headerData(section, Qt::Horizontal, Qt::DisplayRole).toString()
+-                : QString();
+-        state[QStringLiteral("sortDescending")] =
+-                pHeader->sortIndicatorOrder() == Qt::DescendingOrder;
+-        QVariantList sortCriteria;
+-        const TrackModel::SortColumnId s8SortCriteria[] = {
+-                TrackModel::SortColumnId::Title,
+-                TrackModel::SortColumnId::Artist,
+-                TrackModel::SortColumnId::Bpm,
+-                TrackModel::SortColumnId::DateTimeAdded,
+-                TrackModel::SortColumnId::TrackNumber,
+-                TrackModel::SortColumnId::Key,
+-        };
+-        for (const auto columnId : s8SortCriteria) {
+-            const int column = pTrackModel->columnIndexFromSortColumnId(columnId);
+-            if (column < 0 || !pTrackModel->isColumnSortable(column)) {
+-                continue;
+-            }
+-            const QString label = pTable->model()
+-                                          ->headerData(column, Qt::Horizontal, Qt::DisplayRole)
+-                                          .toString();
+-            if (!label.isEmpty()) {
+-                sortCriteria.append(QVariantMap{
+-                        {QStringLiteral("id"), static_cast<int>(columnId)},
+-                        {QStringLiteral("label"), label}});
+-            }
+-        }
+-        state[QStringLiteral("sortCriteria")] = sortCriteria;
+-    }
++    appendBrowserSortState(&state, pLibrary);
+     state[QStringLiteral("previewPlaying")] =
+             ControlObject::get(ConfigKey("[PreviewDeck1]", "play")) > 0.0;
+     state[QStringLiteral("previewPosition")] = qBound(0.0,
+-- 
+2.55.0
+

@@ -204,6 +204,17 @@ Mixxx.ControllerScreen {
         onTriggered: root.browser = engine.getS8BrowserState(9) || ({})
     }
 
+    // ---- popups published by the HID mapping (kind 0 = none, 2 = warning;
+    // title 1 BPM, 2 SORT BY, 3 LOOP SIZE, 4 DECK LOCKED, 5 LOADING)
+    component Popup: Mixxx.ControlProxy { group: "[S8Display]" }
+    readonly property string sidePrefix: root.screenIndex === 1 ? "right_" : "left_"
+    Popup { id: popupKind; key: root.sidePrefix + "popup_kind" }
+    Popup { id: popupTitle; key: root.sidePrefix + "popup_title" }
+    Popup { id: popupValue; key: root.sidePrefix + "popup_value" }
+    Popup { id: popupHasValue; key: root.sidePrefix + "popup_has_value" }
+    Popup { id: popupIndex; key: root.sidePrefix + "popup_pending_index" }
+    Popup { id: popupDescending; key: root.sidePrefix + "popup_pending_descending" }
+
     Component.onCompleted: {
         console.log("S8 screen " + root.screenId + ": browser API " + (root.browserApi ? "available" : "missing"));
         var setting = typeof engine !== "undefined" && engine.getSetting ? engine.getSetting("phraseBars") : undefined;
@@ -439,6 +450,58 @@ Mixxx.ControllerScreen {
                 visible: !root.browserApi || (root.browser.available === false)
                 text: root.browserApi ? "Library not available" : "Browser needs the S8 Mixxx patch"
                 color: root.faint; font.family: root.sans; font.pixelSize: 14
+            }
+        }
+
+        // Popup over either view
+        Rectangle {
+            id: popup
+            readonly property int title: Math.round(popupTitle.value)
+            readonly property bool sort: title === 2
+            readonly property var criteria: root.browser.sortCriteria || []
+            visible: popupKind.value > 0 && title > 0
+            anchors.centerIn: parent
+            width: sort ? 260 : 220
+            height: sort ? 40 + criteria.length * 24 : 84
+            radius: 4; color: root.panel
+            border.width: 2; border.color: popupKind.value === 2 ? root.warn : "#2f8cff"
+            Text {
+                id: popupHeading
+                x: 12; y: 8
+                text: ["", "TEMPO", "SORT BY", "LOOP SIZE", "DECK LOCKED", "LOADING"][popup.title] || ""
+                color: root.dim; font.family: root.sans; font.pixelSize: 12; font.bold: true
+            }
+            Text {
+                anchors.right: parent.right; anchors.rightMargin: 12; y: 8
+                visible: popup.sort
+                text: popupDescending.value > 0 ? "DESCENDING ▼" : "ASCENDING ▲"
+                color: root.dim; font.family: root.mono; font.pixelSize: 11; font.bold: true
+            }
+            Text {
+                visible: !popup.sort && popupHasValue.value > 0
+                anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 10
+                text: popup.title === 1 ? popupValue.value.toFixed(2) : String(popupValue.value)
+                color: root.text; font.family: root.mono; font.pixelSize: 30; font.bold: true
+            }
+            Column {
+                visible: popup.sort
+                anchors.top: popupHeading.bottom; anchors.topMargin: 8
+                x: 6; width: parent.width - 12
+                Repeater {
+                    model: popup.criteria.length
+                    Rectangle {
+                        readonly property bool pending: index === Math.round(popupIndex.value)
+                        width: parent.width; height: 24; radius: 2
+                        color: pending ? "#1a2a44" : "transparent"
+                        Rectangle { width: 3; height: parent.height; color: "#2f8cff"; visible: parent.pending }
+                        Text {
+                            x: 10; anchors.verticalCenter: parent.verticalCenter
+                            text: String(popup.criteria[index].label || "").toUpperCase()
+                            color: parent.pending ? root.text : root.dim
+                            font.family: root.sans; font.pixelSize: 14; font.bold: parent.pending
+                        }
+                    }
+                }
             }
         }
     }
