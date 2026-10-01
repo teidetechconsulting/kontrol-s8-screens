@@ -1,7 +1,7 @@
 From 5adf26a2ba0c687ba9dc837e84eca2c10763a390 Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Wed, 30 Sep 2026 18:14:09 +0200
-Subject: [PATCH 4/5] Controller screens: native Kontrol S8 frame encoder
+Subject: [PATCH 04/10] Controller screens: native Kontrol S8 frame encoder
  (transform="s8:N")
 
 The QML transformFrame runs on the controller thread, the same thread that
@@ -219,5 +219,5 @@ index e073f92d87..cb4b56b0fe 100644
      QList<QJSValue> m_incomingDataFunctions;
      QHash<QString, QJSValue> m_scriptWrappedFunctionCache;
 -- 
-2.53.0
+2.55.0
 

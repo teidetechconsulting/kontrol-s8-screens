@@ -1,8 +1,8 @@
 From 13e74dd7c53f84dfe570dabca3b599bfb610f184 Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Wed, 30 Sep 2026 00:22:51 +0200
-Subject: [PATCH 2/5] S8: explicit browser level, focus-independent enter, Back
- reports top level
+Subject: [PATCH 02/10] S8: explicit browser level, focus-independent enter,
+ Back reports top level
 
 Co-authored-by: Cursor <cursoragent@cursor.com>
 ---
@@ -136,5 +136,5 @@ index 7eef2d1e61..b2d5178762 100644
      Q_INVOKABLE bool s8PreviewSelected(bool play);
      Q_INVOKABLE bool s8PreviewSeek(double seconds);
 -- 
-2.53.0
+2.55.0
 

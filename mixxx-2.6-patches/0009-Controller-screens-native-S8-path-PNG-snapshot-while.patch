@@ -1,0 +1,52 @@
+From c5972d1c22540fdee6827c285b32e5ca4a441a31 Mon Sep 17 00:00:00 2001
+From: Daniel <daniel@teide.tech>
+Date: Thu, 1 Oct 2026 16:14:06 +0200
+Subject: [PATCH 09/10] Controller screens (native S8 path): PNG snapshot while
+ /tmp/s8-snapshot exists
+
+Debug aid: writes /tmp/s8-screen-<id>.png about once per second, so what the
+S8 displays can be checked without a camera.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ .../legacy/controllerscriptenginelegacy.cpp      | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/src/controllers/scripting/legacy/controllerscriptenginelegacy.cpp b/src/controllers/scripting/legacy/controllerscriptenginelegacy.cpp
+index 03fcc13b10..5d7139f41c 100644
+--- a/src/controllers/scripting/legacy/controllerscriptenginelegacy.cpp
++++ b/src/controllers/scripting/legacy/controllerscriptenginelegacy.cpp
+@@ -3,7 +3,10 @@
+ #include <memory>
+ 
+ #ifdef MIXXX_USE_QML
++#include <QDateTime>
+ #include <QDirIterator>
++#include <QFile>
++#include <QHash>
+ #include <QQmlEngine>
+ #include <QQuickItem>
+ #include <QQuickWindow>
+@@ -628,6 +631,19 @@ void ControllerScriptEngineLegacy::handleScreenFrame(
+     QByteArray input(reinterpret_cast<const char*>(frame.constBits()), frame.sizeInBytes());
+ 
+     if (!screenInfo.nativeTransform.isEmpty()) {
++        // Debug aid: while /tmp/s8-snapshot exists, write what the screen shows
++        // to /tmp/s8-screen-<id>.png about once per second.
++        static QHash<QString, qint64> s_lastSnapshotMs;
++        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
++        if (nowMs - s_lastSnapshotMs.value(screenInfo.identifier) >= 1000 &&
++                QFile::exists(QStringLiteral("/tmp/s8-snapshot"))) {
++            s_lastSnapshotMs.insert(screenInfo.identifier, nowMs);
++            QImage snapshot(frame);
++            if (screenInfo.endian == LegacyControllerMapping::ScreenInfo::ColorEndian::Big) {
++                qFromBigEndian<ushort>(frame.constBits(), frame.sizeInBytes() / 2, snapshot.bits());
++            }
++            snapshot.save(QStringLiteral("/tmp/s8-screen-%1.png").arg(screenInfo.identifier));
++        }
+         // Parser only accepts "s8:0" / "s8:1".
+         const int screen = screenInfo.nativeTransform.section(':', 1).toInt();
+         uint& counter = m_nativeFrameCounters[screenInfo.identifier];
+-- 
+2.55.0
+

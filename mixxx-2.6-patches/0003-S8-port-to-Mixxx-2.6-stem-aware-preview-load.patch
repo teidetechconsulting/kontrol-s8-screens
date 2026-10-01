@@ -1,7 +1,7 @@
 From 90be1a3cec5e170438b4f9728af3a5302910d03e Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Wed, 30 Sep 2026 01:37:36 +0200
-Subject: [PATCH 3/5] S8: port to Mixxx 2.6 (stem-aware preview load)
+Subject: [PATCH 03/10] S8: port to Mixxx 2.6 (stem-aware preview load)
 
 Co-authored-by: Cursor <cursoragent@cursor.com>
 ---
@@ -28,5 +28,5 @@ index 3b8dfc1688..23e6f4cfca 100644
              return;
          }
 -- 
-2.53.0
+2.55.0
 

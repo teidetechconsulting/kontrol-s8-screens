@@ -1,0 +1,62 @@
+From 1d8b8b86f52be3e02a20fc56336a34a2ee9cf913 Mon Sep 17 00:00:00 2001
+From: Daniel <daniel@teide.tech>
+Date: Thu, 1 Oct 2026 16:43:16 +0200
+Subject: [PATCH 10/10] QML waveform renderers: initialise factory members
+
+gainAll/gainLow/gainMid/gainHigh (and the end-of-track and until-mark
+settings) had no initial value. create() passes them to the renderer, so a
+screen could start with NaN band gains: the RGB waveform collapsed to its
+axis, on one controller screen but not the other, depending on memory.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ src/qml/qmlwaveformrenderer.h | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/src/qml/qmlwaveformrenderer.h b/src/qml/qmlwaveformrenderer.h
+index d19371bf17..fb24bc6daf 100644
+--- a/src/qml/qmlwaveformrenderer.h
++++ b/src/qml/qmlwaveformrenderer.h
+@@ -52,7 +52,7 @@ class QmlWaveformRendererEndOfTrack
+ 
+   private:
+     QColor m_color;
+-    int m_endOfTrackWarningTime;
++    int m_endOfTrackWarningTime{30};
+ };
+ 
+ class QmlWaveformRendererPreroll
+@@ -103,10 +103,10 @@ class QmlWaveformRendererRGB
+     QColor m_midColor;
+     QColor m_highColor;
+ 
+-    double m_gainAll;
+-    double m_gainLow;
+-    double m_gainMid;
+-    double m_gainHigh;
++    double m_gainAll{1.0};
++    double m_gainLow{1.0};
++    double m_gainMid{1.0};
++    double m_gainHigh{1.0};
+ 
+     ::WaveformRendererAbstract::PositionSource m_position{::WaveformRendererAbstract::Play};
+     allshader::WaveformRendererSignalBase::Options m_options{
+@@ -306,11 +306,11 @@ class QmlWaveformUntilMark : public QObject {
+     void textSizeChanged(int);
+ 
+   private:
+-    bool m_showTime;
+-    bool m_showBeats;
++    bool m_showTime{false};
++    bool m_showBeats{false};
+     Qt::Alignment m_align;
+-    int m_textSize;
+-    int m_textHeightLimit;
++    int m_textSize{24};
++    int m_textHeightLimit{0};
+ };
+ 
+ class QmlWaveformRendererMarkRange
+-- 
+2.55.0
+

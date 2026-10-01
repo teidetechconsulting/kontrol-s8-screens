@@ -1,8 +1,8 @@
 From a2aa4ccb29b67915a9ccaf4d0f2ceb78dfc5dbe4 Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Thu, 1 Oct 2026 14:02:35 +0200
-Subject: [PATCH] S8: browser sort criteria also while the sidebar tree is
- focused
+Subject: [PATCH 07/10] S8: browser sort criteria also while the sidebar tree
+ is focused
 
 The track list of the selected sidebar item stays visible, but the tree
 branch of getS8BrowserState returned before filling sortCriteria, so the S8
