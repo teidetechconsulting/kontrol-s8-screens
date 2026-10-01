@@ -124,14 +124,6 @@ Mixxx.ControllerScreen {
     Co { id: loopOn; key: "loop_enabled" }
     Co { id: loopSize; key: "beatloop_size" }
     Co { id: playing; key: "play" }
-    Co { id: stemCount; key: "stem_count" }
-
-    // Name of a quick-effect chain preset; loaded_chain_preset indexes this list.
-    function presetName(index) {
-        var m = Mixxx.EffectsManager ? Mixxx.EffectsManager.quickChainPresetModel : null;
-        if (!m || index < 0 || index >= m.rowCount()) return "";
-        return String(m.data(m.index(Math.round(index), 0)) || "");
-    }
 
     function clock(seconds) {
         if (!(seconds >= 0)) return "--:--";
@@ -365,64 +357,26 @@ Mixxx.ControllerScreen {
             }
         }
 
-        // Next hotcue; on stem tracks compact, above the stem effect cells
+        // Next hotcue
         Rectangle {
             id: bottomPanel
-            readonly property bool stems: stemCount.value > 0
             anchors.top: phraseRow.bottom; anchors.topMargin: 6
             anchors.bottom: parent.bottom; anchors.bottomMargin: 4
             x: 6; width: parent.width - 12; radius: 3; color: root.panel
             Item {
                 id: cueLine
-                width: parent.width; height: bottomPanel.stems ? 16 : parent.height
+                width: parent.width; height: parent.height
                 Text {
                     anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter
                     text: phrase.nextCue ? "NEXT CUE " + phrase.nextCue.n + (phrase.nextCue.label ? "  " + phrase.nextCue.label : "") : "NO CUE AHEAD"
                     color: phrase.nextCue ? root.leaderColor : root.faint; font.family: root.sans
-                    font.pixelSize: bottomPanel.stems ? 10 : 13; font.bold: true
+                    font.pixelSize: 13; font.bold: true
                 }
                 Text {
                     anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
                     visible: phrase.nextCue !== null
                     text: phrase.barsToCue.toFixed(1) + " BARS"
-                    color: root.text; font.family: root.mono; font.pixelSize: bottomPanel.stems ? 11 : 16; font.bold: true
-                }
-            }
-            // Per stem: colour, name, quick effect and knob position. Knob turns
-            // the effect, SHIFT+knob and the display arrows change it.
-            Row {
-                visible: bottomPanel.stems
-                anchors.top: cueLine.bottom; anchors.left: parent.left; anchors.right: parent.right
-                anchors.bottom: parent.bottom; anchors.margins: 2; spacing: 2
-                Repeater {
-                    model: bottomPanel.stems && root.player ? root.player.stemsModel : 0
-                    Item {   // an Item: the model's "color" role would override a Rectangle's colour
-                        id: stemCell
-                        required property int index
-                        required property color color
-                        readonly property string fxGroup: "[QuickEffectRack1_" + root.group.slice(0, -1) + "_Stem" + (index + 1) + "]]"
-                        Mixxx.ControlProxy { id: stemSuper; group: stemCell.fxGroup; key: "super1" }
-                        Mixxx.ControlProxy { id: stemPreset; group: stemCell.fxGroup; key: "loaded_chain_preset" }
-                        Mixxx.ControlProxy { id: stemMute; group: root.group.slice(0, -1) + "_Stem" + (stemCell.index + 1) + "]"; key: "mute" }
-                        width: (parent.width - 6) / 4; height: parent.height
-                        opacity: stemMute.value > 0 ? 0.35 : 1
-                        Rectangle { anchors.fill: parent; radius: 2; color: "#0f1216" }
-                        Rectangle { width: 3; height: parent.height; radius: 1; color: stemCell.color }
-                        Text {
-                            id: stemText
-                            x: 7; anchors.verticalCenter: parent.verticalCenter; width: parent.width * 0.64 - 7
-                            elide: Text.ElideRight
-                            text: root.presetName(stemPreset.value)
-                            color: root.text; font.family: root.sans; font.pixelSize: 9; font.bold: true
-                        }
-                        Rectangle {   // knob position
-                            anchors.left: stemText.right; anchors.leftMargin: 3; anchors.right: parent.right
-                            anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
-                            height: 4; radius: 1; color: "#2a3139"
-                            Rectangle { x: (parent.width - width) / 2; y: -2; width: 1; height: parent.height + 4; color: root.dim }   // neutral
-                            Rectangle { width: 3; height: parent.height; color: stemCell.color; x: stemSuper.value * (parent.width - 3) }
-                        }
-                    }
+                    color: root.text; font.family: root.mono; font.pixelSize: 16; font.bold: true
                 }
             }
         }
