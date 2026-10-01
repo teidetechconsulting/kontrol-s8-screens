@@ -1,0 +1,13 @@
+module Mixxx
+ControllerScreen 1.0 ControllerScreen.qml
+ControlProxy 1.0 ControlProxy.qml
+singleton PlayerManager 1.0 PlayerManager.qml
+singleton FakeEngine 1.0 FakeEngine.qml
+WaveformMark 1.0 Stub.qml
+WaveformMarkRange 1.0 Stub.qml
+WaveformRendererBeat 1.0 Stub.qml
+WaveformRendererMark 1.0 Stub.qml
+WaveformRendererMarkRange 1.0 Stub.qml
+WaveformRendererRGB 1.0 Stub.qml
+WaveformRendererStem 1.0 Stub.qml
+UntilMark 1.0 UntilMark.qml

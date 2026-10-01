@@ -180,7 +180,32 @@ Mixxx.ControllerScreen {
         }
     }
     Timer { interval: 250; running: true; repeat: true; onTriggered: phrase.refreshNextCue() }
+    // A new track in the same deck, or a grid that arrives after analysis,
+    // resets the beats model.
+    Connections {
+        target: root.player ? root.player.beatsModel : null
+        function onModelReset() { phrase.reloadBeats(); }
+    }
+
+    // ---- browser: the HID mapping sets [S8Display] context 1 while BROWSE is active
+    Mixxx.ControlProxy {
+        id: context
+        group: "[S8Display]"
+        key: root.screenIndex === 1 ? "right_context" : "left_context"
+    }
+    readonly property bool browsing: Math.round(context.value) === 1
+    readonly property bool browserApi: typeof engine !== "undefined" && typeof engine.getS8BrowserState === "function"
+    property var browser: ({})
+    Timer {
+        // getS8BrowserState blocks the controller thread until the GUI thread
+        // answers, so poll only while the browser is open.
+        interval: 100; repeat: true; triggeredOnStart: true
+        running: root.browsing && root.browserApi
+        onTriggered: root.browser = engine.getS8BrowserState(9) || ({})
+    }
+
     Component.onCompleted: {
+        console.log("S8 screen " + root.screenId + ": browser API " + (root.browserApi ? "available" : "missing"));
         var setting = typeof engine !== "undefined" && engine.getSetting ? engine.getSetting("phraseBars") : undefined;
         phrase.phraseBars = Number(setting) || 16;
         phrase.reloadBeats();
@@ -332,6 +357,88 @@ Mixxx.ControllerScreen {
                 visible: phrase.nextCue !== null
                 text: phrase.barsToCue.toFixed(1) + " BARS"
                 color: root.text; font.family: root.mono; font.pixelSize: 16; font.bold: true
+            }
+        }
+
+        // Browser: replaces the deck view while BROWSE is active
+        Rectangle {
+            id: browserView
+            anchors.fill: parent
+            visible: root.browsing
+            color: root.bg
+            readonly property var rows: root.browser.rows || []
+            readonly property int selected: root.browser.selectedIndex || 0
+            readonly property bool tree: root.browser.mode === "tree"
+
+            Rectangle {
+                id: browserHeader
+                width: parent.width; height: 26; color: root.panel
+                Text {
+                    anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: sortText.left; anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideLeft
+                    text: root.browser.path || "BROWSER"
+                    color: root.text; font.family: root.sans; font.pixelSize: 12; font.bold: true
+                }
+                Text {
+                    id: sortText
+                    anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                    text: (root.browser.previewPlaying ? "▶ PREVIEW   " : "")
+                          + (!browserView.tree && root.browser.sortLabel
+                             ? root.browser.sortLabel.toUpperCase() + (root.browser.sortDescending ? " ▼" : " ▲") : "")
+                    color: root.browser.previewPlaying ? root.syncColor : root.dim
+                    font.family: root.mono; font.pixelSize: 11; font.bold: true
+                }
+            }
+
+            Column {
+                anchors.top: browserHeader.bottom; anchors.topMargin: 2
+                width: parent.width
+                Repeater {
+                    model: browserView.rows.length
+                    Rectangle {
+                        readonly property var row: browserView.rows[index] || ({})
+                        readonly property bool isSelected: index === browserView.selected
+                        width: parent.width; height: 27
+                        color: isSelected ? "#1a2a44" : (index % 2 ? "#0f1216" : "transparent")
+                        Rectangle { width: 3; height: parent.height; color: "#2f8cff"; visible: parent.isSelected }
+                        Row {
+                            id: names
+                            x: 10; anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - x - (browserView.tree ? 10 : meta.width + 16)
+                            spacing: 8
+                            Text {
+                                id: title
+                                width: Math.min(implicitWidth, names.width * (row.artist ? 0.62 : 1))
+                                elide: Text.ElideRight
+                                text: (row.type === "folder" ? (row.expandable ? "▸ " : "  ") : "") + (row.title || "")
+                                color: root.text; font.family: root.sans; font.pixelSize: 14; font.bold: parent.parent.isSelected
+                            }
+                            Text {
+                                width: names.width - title.width - names.spacing
+                                elide: Text.ElideRight
+                                text: row.artist || ""
+                                color: root.dim; font.family: root.sans; font.pixelSize: 13
+                            }
+                        }
+                        Row {
+                            id: meta
+                            visible: !browserView.tree
+                            anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                            spacing: 8
+                            Text { width: 46; horizontalAlignment: Text.AlignRight; text: row.bpm > 0 ? row.bpm.toFixed(1) : ""; color: root.text; font.family: root.mono; font.pixelSize: 13 }
+                            Text { width: 30; horizontalAlignment: Text.AlignHCenter; text: row.key || ""; color: root.text; font.family: root.mono; font.pixelSize: 13; font.bold: true }
+                            Text { width: 36; horizontalAlignment: Text.AlignRight; text: row.duration > 0 ? root.clock(row.duration) : ""; color: root.dim; font.family: root.mono; font.pixelSize: 13 }
+                        }
+                    }
+                }
+            }
+
+            Text {
+                anchors.centerIn: parent
+                visible: !root.browserApi || (root.browser.available === false)
+                text: root.browserApi ? "Library not available" : "Browser needs the S8 Mixxx patch"
+                color: root.faint; font.family: root.sans; font.pixelSize: 14
             }
         }
     }
