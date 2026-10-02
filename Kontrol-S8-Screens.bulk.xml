@@ -8,12 +8,6 @@
       <product protocol="bulk" vendor_id="0x17cc" product_id="0x1370" out_epaddr="0x04" interface_number="0x06" />
     </devices>
   </info>
-  <settings>
-    <option variable="phraseBars" type="integer" min="4" max="64" step="4" default="16"
-        label="Default phrase length (bars)">
-      <description>Used for tracks without phrase annotations.</description>
-    </option>
-  </settings>
   <!-- direction="out": IF6 has no IN endpoint; without it Mixxx starts a bulk
        reader thread that spins on a full CPU core. -->
   <controller id="KontrolS8Screens" direction="out">

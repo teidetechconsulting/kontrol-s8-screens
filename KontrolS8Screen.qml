@@ -22,8 +22,8 @@ Mixxx.ControllerScreen {
     property string group: "[Channel" + deck + "]"
     onGroupChanged: {
         root.player = Mixxx.PlayerManager.getPlayer(root.group);
-        phrase.reloadBeats();
-        phrase.refreshNextCue();
+        grid.reloadBeats();
+        grid.refreshNextCue();
     }
     property var player: Mixxx.PlayerManager.getPlayer(root.group)
     // Stem tracks: stems as separate lanes (their colours; Mixxx falls back to
@@ -110,7 +110,7 @@ Mixxx.ControllerScreen {
 
     // ---- deck state -----------------------------------------------------
     component Co: Mixxx.ControlProxy { group: root.group }
-    Co { id: loaded; key: "track_loaded"; onValueChanged: { root.player = Mixxx.PlayerManager.getPlayer(root.group); phrase.reloadBeats() } }
+    Co { id: loaded; key: "track_loaded"; onValueChanged: { root.player = Mixxx.PlayerManager.getPlayer(root.group); grid.reloadBeats() } }
     Co { id: bpm; key: "bpm" }
     Co { id: rate; key: "rate" }
     Co { id: rateRange; key: "rateRange" }
@@ -123,6 +123,8 @@ Mixxx.ControllerScreen {
     Co { id: quantize; key: "quantize" }
     Co { id: loopOn; key: "loop_enabled" }
     Co { id: loopSize; key: "beatloop_size" }
+    Co { id: loopStart; key: "loop_start_position" }
+    Co { id: loopEnd; key: "loop_end_position" }
     Co { id: playing; key: "play" }
 
     function clock(seconds) {
@@ -131,11 +133,10 @@ Mixxx.ControllerScreen {
         return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2);
     }
 
-    // ---- phrase model: bars from the beat grid, default-length phrases ----
+    // ---- bars from the beat grid, next hotcue ----
     QtObject {
-        id: phrase
+        id: grid
         property var beats: []            // frame positions
-        property int phraseBars: 16
         readonly property real frame: playpos.value * samples.value / 2
         // index of the last beat at or before the playhead, plus fraction
         readonly property real beatPos: {
@@ -148,9 +149,6 @@ Mixxx.ControllerScreen {
         }
         readonly property int bar: Math.floor(beatPos / 4) + 1
         readonly property int beatInBar: Math.floor(beatPos) % 4 + 1
-        readonly property int number: Math.floor((bar - 1) / phraseBars) + 1
-        readonly property int barInPhrase: (bar - 1) % phraseBars + 1
-        readonly property real barsLeft: phraseBars - (beatPos / 4 - (number - 1) * phraseBars)
         // next hotcue ahead of the playhead
         property var nextCue: null
         readonly property real barsToCue: nextCue ? (beatIndexOf(nextCue.pos) - beatPos) / 4 : -1
@@ -179,12 +177,12 @@ Mixxx.ControllerScreen {
             nextCue = best;
         }
     }
-    Timer { interval: 250; running: true; repeat: true; onTriggered: phrase.refreshNextCue() }
+    Timer { interval: 250; running: true; repeat: true; onTriggered: grid.refreshNextCue() }
     // A new track in the same deck, or a grid that arrives after analysis,
     // resets the beats model.
     Connections {
         target: root.player ? root.player.beatsModel : null
-        function onModelReset() { phrase.reloadBeats(); }
+        function onModelReset() { grid.reloadBeats(); }
     }
 
     // ---- browser: the HID mapping sets [S8Display] context 1 while BROWSE is active
@@ -217,9 +215,7 @@ Mixxx.ControllerScreen {
 
     Component.onCompleted: {
         console.log("S8 screen " + root.screenId + ": browser API " + (root.browserApi ? "available" : "missing"));
-        var setting = typeof engine !== "undefined" && engine.getSetting ? engine.getSetting("phraseBars") : undefined;
-        phrase.phraseBars = Number(setting) || 16;
-        phrase.reloadBeats();
+        grid.reloadBeats();
     }
 
     // ---- layout (480x272) -------------------------------------------------
@@ -285,8 +281,8 @@ Mixxx.ControllerScreen {
         }
         Text {
             anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: status.verticalCenter
-            text: "BAR " + phrase.bar + "." + phrase.beatInBar + "  ·  " + root.clock(duration.value * playpos.value) + " / " + root.clock(duration.value)
-            color: root.dim; font.family: root.mono; font.pixelSize: 11
+            text: "BAR " + grid.bar + "." + grid.beatInBar + "  ·  " + root.clock(duration.value * playpos.value) + " / " + root.clock(duration.value)
+            color: root.text; font.family: root.mono; font.pixelSize: 12; font.bold: true
         }
 
         // Waveform: Mixxx's own renderers (RGB bands, stems, beat grid, hotcues, loop)
@@ -323,44 +319,37 @@ Mixxx.ControllerScreen {
             }
         }
 
-        // Phrase timeline: current phrase + countdown, next cue in bars
-        Item {
-            id: phraseRow
+        // Whole track: where we are, the cues and the loop, to see breaks coming
+        Rectangle {
+            id: overviewRow
             x: 6; width: parent.width - 12
             anchors.top: wave.bottom; anchors.topMargin: 6; height: 44
-            Text {
-                y: 0; text: "PHRASE " + phrase.number + "  ·  " + phrase.barInPhrase + "/" + phrase.phraseBars
-                color: root.dim; font.family: root.mono; font.pixelSize: 12; font.bold: true
+            color: root.panel; radius: 2
+            MixxxControls.WaveformOverview {
+                id: overview
+                group: root.group
+                anchors.fill: parent; anchors.margins: 1
+                renderer: Mixxx.WaveformOverview.Renderer.RGB
+                channels: Mixxx.WaveformOverview.Channels.BothChannels
+                colorLow: "#ff3a1e"; colorMid: "#37e05a"; colorHigh: "#2f8cff"
             }
-            Row {
-                anchors.right: parent.right; y: -3; spacing: 5
-                Text { id: barsLeftText; text: phrase.barsLeft.toFixed(1); color: phrase.barsLeft < 2 ? root.warn : root.text; font.family: root.mono; font.pixelSize: 18; font.bold: true }
-                Text { anchors.baseline: barsLeftText.baseline; text: "BARS  →  NEXT PHRASE"; color: root.dim; font.family: root.mono; font.pixelSize: 11; font.bold: true }
+            Rectangle {   // played part
+                anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
+                width: parent.width * Math.max(0, Math.min(1, playpos.value))
+                color: "#990b0d10"
             }
-            Row {   // bars of the current phrase, played ones filled, beat ticks in the current bar
-                id: blocks
-                anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                height: 18; spacing: 2
-                Repeater {
-                    model: phrase.phraseBars
-                    Rectangle {
-                        property int n: index + 1
-                        width: (blocks.width - (phrase.phraseBars - 1) * 2) / phrase.phraseBars; height: blocks.height; radius: 1
-                        color: n < phrase.barInPhrase ? "#2f6fff" : (n === phrase.barInPhrase ? "#1a2a44" : "#1a1f25")
-                        Row {
-                            visible: n === phrase.barInPhrase
-                            anchors.fill: parent; anchors.margins: 2; spacing: 1
-                            Repeater { model: 4; Rectangle { width: (parent.width - 3) / 4; height: parent.height; color: index < phrase.beatInBar ? "#5fd4df" : "transparent" } }
-                        }
-                    }
-                }
+            Rectangle {   // loop
+                visible: loopOn.value > 0 && samples.value > 0
+                x: parent.width * loopStart.value / samples.value
+                width: Math.max(2, parent.width * (loopEnd.value - loopStart.value) / samples.value)
+                height: parent.height; color: "#403ddc84"
             }
         }
 
         // Next hotcue
         Rectangle {
             id: bottomPanel
-            anchors.top: phraseRow.bottom; anchors.topMargin: 6
+            anchors.top: overviewRow.bottom; anchors.topMargin: 6
             anchors.bottom: parent.bottom; anchors.bottomMargin: 4
             x: 6; width: parent.width - 12; radius: 3; color: root.panel
             Item {
@@ -368,14 +357,14 @@ Mixxx.ControllerScreen {
                 width: parent.width; height: parent.height
                 Text {
                     anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter
-                    text: phrase.nextCue ? "NEXT CUE " + phrase.nextCue.n + (phrase.nextCue.label ? "  " + phrase.nextCue.label : "") : "NO CUE AHEAD"
-                    color: phrase.nextCue ? root.leaderColor : root.faint; font.family: root.sans
+                    text: grid.nextCue ? "NEXT CUE " + grid.nextCue.n + (grid.nextCue.label ? "  " + grid.nextCue.label : "") : "NO CUE AHEAD"
+                    color: grid.nextCue ? root.leaderColor : root.faint; font.family: root.sans
                     font.pixelSize: 13; font.bold: true
                 }
                 Text {
                     anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-                    visible: phrase.nextCue !== null
-                    text: phrase.barsToCue.toFixed(1) + " BARS"
+                    visible: grid.nextCue !== null
+                    text: grid.barsToCue.toFixed(1) + " BARS"
                     color: root.text; font.family: root.mono; font.pixelSize: 16; font.bold: true
                 }
             }

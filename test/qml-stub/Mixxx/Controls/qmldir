@@ -1,2 +1,3 @@
 module Mixxx.Controls
 WaveformDisplay 1.0 WaveformDisplay.qml
+WaveformOverview 1.0 WaveformOverview.qml
