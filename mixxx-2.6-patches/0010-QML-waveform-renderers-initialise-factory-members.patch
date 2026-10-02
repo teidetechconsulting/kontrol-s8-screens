@@ -1,7 +1,7 @@
 From 1d8b8b86f52be3e02a20fc56336a34a2ee9cf913 Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Thu, 1 Oct 2026 16:43:16 +0200
-Subject: [PATCH 10/12] QML waveform renderers: initialise factory members
+Subject: [PATCH 10/13] QML waveform renderers: initialise factory members
 
 gainAll/gainLow/gainMid/gainHigh (and the end-of-track and until-mark
 settings) had no initial value. create() passes them to the renderer, so a

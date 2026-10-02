@@ -1,0 +1,290 @@
+From 7934242e97fc4338286446b7814dc9af3f6ecf5b Mon Sep 17 00:00:00 2001
+From: Daniel <daniel@teide.tech>
+Date: Fri, 2 Oct 2026 02:26:09 +0200
+Subject: [PATCH 13/13] S8: s8CaptureToSampler (render a deck's loop with stem
+ volumes into a sampler)
+
+Decodes the loop (or beatloop_size beats from the beat at the playhead)
+from the file, mixes the stems with their current volume and mute, writes a
+float WAV to Music/Mixxx/Music/Samples/Captures and loads it into the
+sampler with a constant-tempo grid at the deck's BPM (locked), repeat,
+quantize and sync on. Render on a worker thread, library/player on the main
+thread. PlayerManager and TrackCollectionManager are registered for this.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ .../controllerscriptinterfacelegacy.cpp       | 181 ++++++++++++++++++
+ .../legacy/controllerscriptinterfacelegacy.h  |  10 +
+ src/coreservices.cpp                          |   3 +
+ 3 files changed, 194 insertions(+)
+
+diff --git a/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp b/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
+index fd3a2e29dd..a90565def2 100644
+--- a/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
++++ b/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.cpp
+@@ -11,6 +11,11 @@
+ #include <QMutexLocker>
+ #include <QtConcurrent/QtConcurrentRun>
+ #include <QRegularExpression>
++#include <QDateTime>
++#include <QDir>
++#include <QStandardPaths>
++#include <QThreadPool>
++#include <sndfile.h>
+ #include "track/beats.h"
+ #include "track/keyutils.h"
+ 
+@@ -25,7 +30,10 @@
+ #include "moc_controllerscriptinterfacelegacy.cpp"
+ #include "util/cmdlineargs.h"
+ #include "track/track.h"
++#include "library/trackcollectionmanager.h"
+ #include "library/trackmodel.h"
++#include "sources/soundsourceproxy.h"
++#include "track/trackref.h"
+ #include "util/fpclassify.h"
+ #include "util/make_const_iterator.h"
+ #include "util/time.h"
+@@ -2054,3 +2062,176 @@ QByteArray ControllerScriptInterfaceLegacy::convertCharsetInternal(
+     }
+     return fromUtf16(value);
+ }
++
++namespace {
++
++std::weak_ptr<PlayerManager> s_pS8PlayerManager;
++std::weak_ptr<TrackCollectionManager> s_pS8TrackCollectionManager;
++
++// Decode [startFrame, endFrame) of the track, mix stems with the given gains
++// (stereo files are copied) and write a 32-bit float WAV.
++bool renderCaptureToWav(const TrackPointer& pTrack,
++        SINT startFrame,
++        SINT endFrame,
++        const std::array<CSAMPLE, mixxx::kMaxSupportedStems>& stemGains,
++        const QString& path) {
++    mixxx::AudioSource::OpenParams params;
++    params.setChannelCount(mixxx::audio::ChannelCount::stem());
++    auto pSource = SoundSourceProxy(pTrack).openAudioSource(params);
++    if (!pSource) {
++        return false;
++    }
++    const int channels = pSource->getSignalInfo().getChannelCount();
++    const auto range = mixxx::intersect(
++            mixxx::IndexRange::between(startFrame, endFrame), pSource->frameIndexRange());
++    if (range.empty() || (channels != 2 && channels != 2 * mixxx::kMaxSupportedStems)) {
++        pSource->close();
++        return false;
++    }
++    mixxx::SampleBuffer buffer(range.length() * channels);
++    const auto read = pSource->readSampleFrames(mixxx::WritableSampleFrames(
++            range, mixxx::SampleBuffer::WritableSlice(buffer)));
++    const SINT frames = read.frameIndexRange().length();
++    const CSAMPLE* pIn = read.readableData();
++    std::vector<float> stereo(static_cast<std::size_t>(frames) * 2, 0.0f);
++    for (SINT f = 0; f < frames; ++f) {
++        if (channels == 2) {
++            stereo[2 * f] = pIn[2 * f];
++            stereo[2 * f + 1] = pIn[2 * f + 1];
++            continue;
++        }
++        for (int stem = 0; stem < mixxx::kMaxSupportedStems; ++stem) {
++            stereo[2 * f] += stemGains[stem] * pIn[f * channels + 2 * stem];
++            stereo[2 * f + 1] += stemGains[stem] * pIn[f * channels + 2 * stem + 1];
++        }
++    }
++    SF_INFO info{};
++    info.samplerate = static_cast<int>(pSource->getSignalInfo().getSampleRate().value());
++    info.channels = 2;
++    info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
++    SNDFILE* pFile = sf_open(QFile::encodeName(path).constData(), SFM_WRITE, &info);
++    pSource->close();
++    if (!pFile) {
++        return false;
++    }
++    const auto written = sf_writef_float(pFile, stereo.data(), frames);
++    sf_close(pFile);
++    return written == frames;
++}
++
++} // namespace
++
++// static
++void ControllerScriptInterfaceLegacy::registerS8Services(
++        std::shared_ptr<PlayerManager> pPlayerManager,
++        std::shared_ptr<TrackCollectionManager> pTrackCollectionManager) {
++    s_pS8PlayerManager = pPlayerManager;
++    s_pS8TrackCollectionManager = pTrackCollectionManager;
++}
++
++bool ControllerScriptInterfaceLegacy::s8CaptureToSampler(
++        const QString& deckGroup, int samplerNumber) {
++    const TrackPointer pTrack = PlayerInfo::instance().getTrackInfo(deckGroup);
++    const auto pPlayerManager = s_pS8PlayerManager.lock();
++    if (!pTrack || !pPlayerManager || s_pS8TrackCollectionManager.expired() ||
++            samplerNumber < 1 ||
++            samplerNumber > ControlObject::get(ConfigKey(QStringLiteral("[App]"),
++                                    QStringLiteral("num_samplers")))) {
++        return false;
++    }
++    const mixxx::BeatsPointer pBeats = pTrack->getBeats();
++    const mixxx::audio::SampleRate sampleRate = pTrack->getSampleRate();
++    if (!pBeats || !sampleRate.isValid()) {
++        return false;
++    }
++    auto get = [&deckGroup](const char* key) {
++        return ControlObject::get(ConfigKey(deckGroup, QString::fromLatin1(key)));
++    };
++    // Control positions are in samples of the interleaved stereo signal.
++    mixxx::audio::FramePos start;
++    mixxx::audio::FramePos end;
++    if (get("loop_enabled") > 0 && get("loop_start_position") >= 0 &&
++            get("loop_end_position") > get("loop_start_position")) {
++        start = mixxx::audio::FramePos(get("loop_start_position") / 2);
++        end = mixxx::audio::FramePos(get("loop_end_position") / 2);
++    } else {
++        const auto position = mixxx::audio::FramePos(
++                get("playposition") * get("track_samples") / 2);
++        const double beats = get("beatloop_size") > 0 ? get("beatloop_size") : 4;
++        start = pBeats->findPrevBeat(position);
++        if (!start.isValid()) {
++            start = position;
++        }
++        end = pBeats->findNBeatsFromPosition(start, beats);
++    }
++    if (!start.isValid() || !end.isValid() || end <= start) {
++        return false;
++    }
++    const mixxx::Bpm bpm = pBeats->getBpmInRange(start, end);
++
++    std::array<CSAMPLE, mixxx::kMaxSupportedStems> stemGains;
++    for (int stem = 0; stem < mixxx::kMaxSupportedStems; ++stem) {
++        const QString stemGroup = deckGroup.chopped(1) + QStringLiteral("_Stem%1]").arg(stem + 1);
++        stemGains[stem] = static_cast<CSAMPLE>(
++                ControlObject::get(ConfigKey(stemGroup, QStringLiteral("mute"))) > 0
++                        ? 0.0
++                        : ControlObject::get(ConfigKey(stemGroup, QStringLiteral("volume"))));
++    }
++
++    const QString dir = QStandardPaths::writableLocation(QStandardPaths::MusicLocation) +
++            QStringLiteral("/Mixxx/Music/Samples/Captures");
++    QDir().mkpath(dir);
++    QString name = QStringLiteral("%1 - %2").arg(pTrack->getArtist(), pTrack->getTitle());
++    name.replace(QRegularExpression(QStringLiteral(R"([/\\:*?"<>|])")), QStringLiteral("_"));
++    const double beats = pBeats->numBeatsInRange(start, end);
++    const QString path = QStringLiteral("%1/%2 [%3 beats] %4.wav")
++                                 .arg(dir,
++                                         name.left(120),
++                                         QString::number(qRound(beats)),
++                                         QDateTime::currentDateTime().toString(
++                                                 QStringLiteral("yyyyMMdd-HHmmss")));
++    const QString samplerGroup = QStringLiteral("[Sampler%1]").arg(samplerNumber);
++    const QString title = QStringLiteral("%1 [%2 beats]").arg(pTrack->getTitle(),
++            QString::number(qRound(beats)));
++    const QString artist = pTrack->getArtist();
++    const SINT startFrame = static_cast<SINT>(start.value());
++    const SINT endFrame = static_cast<SINT>(end.value());
++
++    QThreadPool::globalInstance()->start([=]() {
++        if (!renderCaptureToWav(pTrack, startFrame, endFrame, stemGains, path)) {
++            qWarning() << "S8 capture failed for" << deckGroup << path;
++            return;
++        }
++        // Library and players live on the main thread.
++        QMetaObject::invokeMethod(QCoreApplication::instance(), [=]() {
++            const auto pPlayerManager = s_pS8PlayerManager.lock();
++            const auto pTrackCollectionManager = s_pS8TrackCollectionManager.lock();
++            if (!pPlayerManager || !pTrackCollectionManager) {
++                return;
++            }
++            const TrackPointer pCapture =
++                    pTrackCollectionManager->getOrAddTrack(TrackRef::fromFilePath(path));
++            if (!pCapture) {
++                return;
++            }
++            pCapture->setTitle(title);
++            pCapture->setArtist(artist);
++            if (bpm.isValid()) {
++                pCapture->trySetBeats(mixxx::Beats::fromConstTempo(
++                        sampleRate, mixxx::audio::kStartFramePos, bpm));
++                pCapture->setBpmLocked(true);
++            }
++#ifdef __STEM__
++            pPlayerManager->slotLoadTrackToPlayer(
++                    pCapture, samplerGroup, mixxx::StemChannelSelection(), false);
++#else
++            pPlayerManager->slotLoadTrackToPlayer(pCapture, samplerGroup, false);
++#endif
++            ControlObject::set(ConfigKey(samplerGroup, QStringLiteral("repeat")), 1);
++            ControlObject::set(ConfigKey(samplerGroup, QStringLiteral("quantize")), 1);
++            ControlObject::set(ConfigKey(samplerGroup, QStringLiteral("sync_enabled")), 1);
++            qInfo() << "S8 capture loaded into" << samplerGroup << path;
++        });
++    });
++    return true;
++}
+diff --git a/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.h b/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.h
+index b2d5178762..8529d86a1a 100644
+--- a/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.h
++++ b/src/controllers/scripting/legacy/controllerscriptinterfacelegacy.h
+@@ -5,6 +5,7 @@
+ #include <QVariantList>
+ #include <QVariantMap>
+ #include <QFuture>
++#include <memory>
+ 
+ #include "controllers/softtakeover.h"
+ #include "library/coverart.h"
+@@ -13,6 +14,8 @@
+ #include "util/runtimeloggingcategory.h"
+ 
+ class ControllerScriptEngineLegacy;
++class PlayerManager;
++class TrackCollectionManager;
+ class ControlObjectScript;
+ class ScriptConnection;
+ class ConfigKey;
+@@ -76,6 +79,13 @@ class ControllerScriptInterfaceLegacy : public QObject {
+     Q_INVOKABLE QString s8BrowserEnter();
+     Q_INVOKABLE bool s8BrowserSort(int sortColumnId, bool descending);
+     Q_INVOKABLE bool s8PreviewSelected(bool play);
++    /// Render the deck's active loop, or beatloop_size beats from the beat at
++    /// the playhead, with the current stem volumes to a WAV in the library's
++    /// Samples/Captures and load it into [SamplerN] with a matching grid.
++    /// Returns false if nothing could be captured; the render runs async.
++    Q_INVOKABLE bool s8CaptureToSampler(const QString& deckGroup, int samplerNumber);
++    static void registerS8Services(std::shared_ptr<PlayerManager> pPlayerManager,
++            std::shared_ptr<TrackCollectionManager> pTrackCollectionManager);
+     Q_INVOKABLE bool s8PreviewSeek(double seconds);
+     Q_INVOKABLE QVariantMap getS8EffectState(int effectUnit);
+     Q_INVOKABLE bool s8LoadEffect(int effectUnit, int slot, int visibleEffectIndex);
+diff --git a/src/coreservices.cpp b/src/coreservices.cpp
+index 8f3f90f38c..cc87dbf727 100644
+--- a/src/coreservices.cpp
++++ b/src/coreservices.cpp
+@@ -41,6 +41,7 @@
+ #include <QSGRendererInterface>
+ 
+ #include "controllers/scripting/controllerscriptenginebase.h"
++#include "controllers/scripting/legacy/controllerscriptinterfacelegacy.h"
+ #include "qml/qmlconfigproxy.h"
+ #include "qml/qmlcontrolproxy.h"
+ #include "qml/qmldlgpreferencesproxy.h"
+@@ -780,6 +781,7 @@ void CoreServices::initializeQMLSingletons() {
+     // expected
+     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+ #endif
++    ControllerScriptInterfaceLegacy::registerS8Services(getPlayerManager(), getTrackCollectionManager());
+ }
+ 
+ void CoreServices::initializeKeyboard() {
+@@ -909,6 +911,7 @@ void CoreServices::finalize() {
+     Timer t("CoreServices::~CoreServices");
+     t.start();
+ 
++    ControllerScriptInterfaceLegacy::registerS8Services(nullptr, nullptr);
+ #ifdef MIXXX_USE_QML
+     // Delete all the QML singletons in order to prevent controller leaks
+     mixxx::qml::QmlEffectsManagerProxy::registerEffectsManager(nullptr);
+-- 
+2.55.0
+

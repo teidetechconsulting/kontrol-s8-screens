@@ -1,7 +1,7 @@
 From fdd6a33bcdb82ecca37b35471343dd0bc54e6586 Mon Sep 17 00:00:00 2001
 From: Daniel <daniel@teide.tech>
 Date: Fri, 2 Oct 2026 01:38:41 +0200
-Subject: [PATCH 12/12] BpmControl: beats_adjust_by (change the track's grid
+Subject: [PATCH 12/13] BpmControl: beats_adjust_by (change the track's grid
  BPM by a given delta)
 
 beats_adjust_faster/slower step by 0.01 only; a controller that wants
