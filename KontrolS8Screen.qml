@@ -251,9 +251,10 @@ Mixxx.ControllerScreen {
                     }
                 }
                 Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter; width: 40; height: 26; radius: 3
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(40, keyText.implicitWidth + 10); height: 26; radius: 3
                     color: "#2a3139"
-                    Text { anchors.centerIn: parent; text: root.player ? root.player.keyText : ""; color: root.text; font.family: root.mono; font.pixelSize: 14; font.bold: true }
+                    Text { id: keyText; anchors.centerIn: parent; text: root.player ? root.player.keyText : ""; color: root.text; font.family: root.mono; font.pixelSize: 14; font.bold: true }
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter

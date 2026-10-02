@@ -3,7 +3,7 @@ import QtQuick
 QtObject {
     property QtObject player: QtObject {
         property bool isLoaded: true; property string title: "Lava Flow (Original Mix)"
-        property string artist: "Timanfaya"; property string keyText: "8A"
+        property string artist: "Timanfaya"; property string keyText: Qt.application.arguments[Qt.application.arguments.length - 1] === "6" ? "D♯m/E♭m" : "8A"
         property var beatsModel: null; property var hotcuesModel: null
         property ListModel stemsModel: ListModel {
             ListElement { label: "Drums"; color: "#009E73" } ListElement { label: "Bass"; color: "#D55E00" }
