@@ -30,3 +30,5 @@ Bars count from the first beat of the beat grid (Mixxx has no downbeat
 detection).
 
 License: GPL-2.0-or-later, like Mixxx.
+
+Fork status and the path to upstream Mixxx: [docs/upstream-analysis.md](docs/upstream-analysis.md).
